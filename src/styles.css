@@ -321,3 +321,17 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.0
 .poi-title .grow { padding-top: 44px; }
 .sheet { --city: #c4502a; --city-soft: #f8e6de; }
 .tip, .story, .fact { overflow-wrap: anywhere; }
+
+/* ── fotos ── */
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; border-radius: var(--radius-sm); overflow: hidden; }
+.photo-cell { aspect-ratio: 1; background: var(--surface-2) center/cover no-repeat; position: relative; }
+.photo-cell:active { opacity: 0.85; }
+.photo-by { position: absolute; left: 6px; bottom: 6px; }
+.photo-fav { position: absolute; right: 6px; top: 4px; color: #f5c542; font-size: 18px; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.viewer-img { position: relative; height: 62vh; margin-top: -25px; border-radius: 26px 26px 0 0; background: #111 center/contain no-repeat; display: grid; place-items: center; }
+.viewer-img .close { position: absolute; top: 14px; right: 14px; background: rgba(0,0,0,.4); color: #fff; border: 0; box-shadow: none; }
+.viewer-img .nav-l, .viewer-img .nav-r { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,.35); color: #fff; border: 0; box-shadow: none; }
+.viewer-img .nav-l { left: 10px; }
+.viewer-img .nav-r { right: 10px; }
+.story-frames { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; scrollbar-width: none; }
+.story-frames img { height: 420px; aspect-ratio: 9/16; border-radius: 16px; box-shadow: var(--shadow); scroll-snap-align: start; flex: none; background: var(--surface-2); }

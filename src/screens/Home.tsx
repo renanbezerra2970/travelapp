@@ -6,6 +6,7 @@ import { cityTheme, stopMeta, trip, todayIndex, turnoById, type Stop } from '../
 import { POIS, RARITY } from '../data/pois';
 import { distance, fmtAgo, fmtDistance } from '../lib/geo';
 import { Avatar } from '../components/ui';
+import DayPhotos from '../components/DayPhotos';
 
 const toMin = (t: string) => {
   const [h, m] = t.split(':').map(Number);
@@ -114,6 +115,14 @@ export default function HomeScreen({ nav }: { nav: Nav }) {
           </div>
         </div>
       )}
+
+      {idx === dayI && <DayPhotos day={day.date} />}
+
+      <button className="card tap row" style={{ width: '100%', textAlign: 'left', marginTop: 14 }} onClick={nav.story}>
+        <span style={{ fontSize: 30 }}>🎬</span>
+        <span className="grow"><b>A história da viagem</b><div className="small muted">Monte a colagem com as fotos e descobertas quando quiser</div></span>
+        <ArrowRight size={18} />
+      </button>
 
       <div className="section">
         <div className="section-title">

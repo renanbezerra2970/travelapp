@@ -5,6 +5,7 @@ import { useApp } from '../state/AppContext';
 import { cityTheme, stopMeta, trip, turnoById } from '../lib/trip';
 import { createMap, mapboxgl } from '../lib/mapbox';
 import { mapsLink } from '../lib/geo';
+import DayPhotos from '../components/DayPhotos';
 
 export default function DayView({ index, nav, onBack }: { index: number; nav: Nav; onBack: () => void }) {
   const { privateData } = useApp();
@@ -120,6 +121,8 @@ export default function DayView({ index, nav, onBack }: { index: number; nav: Na
           </div>
         </>
       )}
+
+      <DayPhotos day={day.date} />
     </div>
   );
 }

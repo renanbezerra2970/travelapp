@@ -20,6 +20,7 @@ const RADIUS = { Roma: 1300, Lisboa: 1200, Veneza: 1000, Paris: 1300 };
 
 // Não são atrações
 const BAD_TITLE = /^albergo|^auditorium|associa[çc][ãa]o|funda[çc][ãa]o|fondation|^apeadeiro|^central |esta[çc][ãa]o|metr[oô]|metropolitano|linha \d|hotel|escola|liceu|col[ée]gio|embaixada|^rua |^avenida|^via |^viale |^corso |^largo do |^travessa|^cal(le)? |^rue |^boulevard|^avenue|^quai |^calçada|freguesia|^rione|^sestiere|arrondissement|^quartier|aeroporto|hospital|instituto|minist[ée]rio|banco |tribunal|^lista |^edif[íi]cio |^bairro|^distrito|^zona |gare |porto de |conservat[óo]rio|pontif[íi]cia universidade|sede d|^campo de |futebol|est[áa]dio ol[ií]mpico|^(\d{4}) /i;
+const BAD_EVENT = /^(ataque|atentado|batalha|cerco|massacre|revolta|inc[êe]ndio|tratado|tomada|motim|greve|ag[êe]ncia|caritas|assembleia|minist|conselho|autoridade|comiss[ãa]o|federa[çc][ãa]o|sindicato|partido|jornal|editora|empresa|sociedade)|antidopagem|(em|de) \d{4}$/i;
 const BAD_DESC = /esta[çc][ãa]o|metr[oô]|freguesia|rua|avenida|hotel|escola|empresa|bairro|subdivis|banco|jogador|futebolista|pessoa|ator|atriz|cantor|pol[ií]tico|clube|universidade|faculdade|hospital/i;
 
 const KINDS = [
@@ -116,6 +117,7 @@ for (const [city, centers] of Object.entries(AREAS)) {
       const s = sums[k];
       if (!s || s.type !== 'standard' || !s.extract || s.extract.length < 120) return;
       if (s.description && BAD_DESC.test(s.description)) return;
+      if (BAD_EVENT.test(s.title) || /(foi um|foi uma) (ataque|atentado|batalha|conflito|cerco|massacre|evento)/i.test(s.extract.slice(0, 200))) return;
       if (BAD_DESC.test(s.extract.slice(0, 90)) && !/igreja|bas[íi]lica|museu|pal[áa]cio|monumento|pra[çc]a|ponte|fonte|torre/i.test(s.extract.slice(0, 90))) return;
       if (picked.some((p) => dist(p, c) < 15)) return;
       const text = `${c.title} ${s.description ?? ''} ${s.extract.slice(0, 160)}`;

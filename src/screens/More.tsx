@@ -7,6 +7,7 @@ import Album from '../components/Album';
 import PoiSheet from '../components/PoiSheet';
 import { poiById } from '../data/pois';
 import { AVATARS, COLORS } from './Auth';
+import type { Nav } from '../App';
 
 type Page = 'perfil' | 'album' | 'transporte' | 'gastos' | 'checklist' | 'dicas' | 'docs';
 
@@ -19,7 +20,7 @@ const MENU: { id: Page; emoji: string; title: string; sub: string }[] = [
   { id: 'dicas', emoji: '💡', title: 'Regras de ouro', sub: 'Dicas para aproveitar cada parada' },
 ];
 
-export default function More() {
+export default function More({ nav }: { nav: Nav }) {
   const { profile } = useApp();
   const [page, setPage] = useState<Page | null>(null);
 
@@ -52,6 +53,11 @@ export default function More() {
         <ChevronRight size={18} color="var(--ink-3)" />
       </button>
       <div className="list" style={{ marginTop: 16 }}>
+        <button className="list-item" onClick={nav.story}>
+          <span style={{ fontSize: 24, width: 32, textAlign: 'center' }}>🎬</span>
+          <span className="grow"><b>A história da viagem</b><div className="small muted">Colagem das fotos e descobertas · material para o vídeo</div></span>
+          <ChevronRight size={18} color="var(--ink-3)" />
+        </button>
         {MENU.map((m) => (
           <button key={m.id} className="list-item" onClick={() => setPage(m.id)}>
             <span style={{ fontSize: 24, width: 32, textAlign: 'center' }}>{m.emoji}</span>
