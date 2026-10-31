@@ -1,11 +1,12 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { ArrowRight, Compass, Plane, BedDouble, Phone, ExternalLink, AlertTriangle, Sunset } from 'lucide-react';
 import type { Nav } from '../App';
 import { useApp } from '../state/AppContext';
 import { cityTheme, stopMeta, trip, todayIndex, turnoById, type Stop } from '../lib/trip';
 import { POIS, RARITY } from '../data/pois';
 import { distance, fmtAgo, fmtDistance } from '../lib/geo';
-import { Avatar } from '../components/ui';
+import { Avatar, FacePicker, toast } from '../components/ui';
+import { uploadFace } from '../lib/faces';
 import DayPhotos from '../components/DayPhotos';
 
 const toMin = (t: string) => {
@@ -14,7 +15,8 @@ const toMin = (t: string) => {
 };
 
 export default function HomeScreen({ nav }: { nav: Nav }) {
-  const { members, locations, myPos, privateData, profile } = useApp();
+  const { members, locations, myPos, privateData, profile, role } = useApp();
+  const [faceBusy, setFaceBusy] = useState(false);
   const idx = todayIndex();
   const dayI = Math.min(Math.max(idx, 0), trip.days.length - 1);
   const day = trip.days[dayI];
@@ -73,13 +75,35 @@ export default function HomeScreen({ nav }: { nav: Nav }) {
         <div className="eyebrow">{before ? `Faltam ${daysLeft} dias` : idx >= trip.days.length ? 'Viagem concluída' : `Hoje · ${day.dow} ${day.date}`}</div>
         <h2>{day.city} — {day.title}</h2>
         <div style={{ position: 'relative', zIndex: 1, opacity: 0.9, fontSize: 14 }}>
-          Olá, {profile?.display_name} {profile?.avatar}
+          Olá, {profile?.display_name} 👋
         </div>
         <div className="hero-actions">
           <button className="btn" onClick={() => nav.openDay(dayI)}>Abrir o dia <ArrowRight size={18} /></button>
           <button className="btn glass" onClick={() => nav.explore()}><Compass size={18} /> Explorar ao redor</button>
         </div>
       </div>
+
+      {role && profile && !profile.avatar_path && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <b>Adicione a foto do seu rosto</b>
+          <div className="small muted" style={{ margin: '4px 0 12px' }}>É ela que aparece no mapa, no ranking e nas colagens — assim o grupo te encontra.</div>
+          <FacePicker
+            color={profile.color}
+            busy={faceBusy}
+            onPick={async (b) => {
+              setFaceBusy(true);
+              try {
+                await uploadFace(profile.id, b);
+                toast('Foto salva 🙂');
+              } catch (e: any) {
+                toast(e.message);
+              } finally {
+                setFaceBusy(false);
+              }
+            }}
+          />
+        </div>
+      )}
 
       <div className="stats">
         <div className="stat"><b>13</b><span>dias</span></div>

@@ -1,5 +1,6 @@
 import { useApp } from '../state/AppContext';
 import { AuthHero } from './Auth';
+import { Avatar } from '../components/ui';
 
 /** Conta sem viagem (ex.: removida pelo líder) */
 export default function JoinTrip() {
@@ -8,7 +9,7 @@ export default function JoinTrip() {
     <div className="auth app">
       <AuthHero />
       <div className="card" style={{ marginTop: 22, textAlign: 'center' }}>
-        <div style={{ fontSize: 40 }}>{profile?.avatar ?? '🧳'}</div>
+        {profile && <div className="row" style={{ justifyContent: 'center' }}><Avatar p={profile} size="lg" /></div>}
         <h2 style={{ fontSize: 22, marginTop: 6 }}>Olá{profile ? `, ${profile.display_name}` : ''}</h2>
         <p className="muted" style={{ marginTop: 6 }}>Sua conta ainda não está em nenhuma viagem. Peça ao líder para te adicionar.</p>
         <button className="btn light block" style={{ marginTop: 16 }} onClick={signOut}>Sair</button>

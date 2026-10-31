@@ -10,6 +10,7 @@ import { wikiNearby, type WikiNearby } from '../lib/wiki';
 import PoiSheet, { CAPTURE_RADIUS, captureReach, type Target } from '../components/PoiSheet';
 import Album from '../components/Album';
 import { Sheet, toast } from '../components/ui';
+import { faceHtml } from '../lib/faces';
 
 const NEAR_RADIUS = 700;
 /** Abaixo deste zoom o mapa mostra agrupamentos (concentrações) em vez dos tokens */
@@ -70,7 +71,7 @@ const loadCats = (): Set<Category> => {
 };
 
 export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi?: string; at?: LatLng }; clearFocus: () => void }) {
-  const { myPos, posSource, startGps, simulate, gpsError, profile, members, locations, checkins, session, myAccuracy } = useApp();
+  const { myPos, posSource, startGps, simulate, gpsError, profile, members, faces, locations, checkins, session, myAccuracy } = useApp();
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -284,9 +285,9 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
     }
     const el = meMarker.current.getElement();
     el.style.setProperty('--c', profile?.color ?? '#E4572E');
-    el.querySelector('.face')!.textContent = profile?.avatar ?? '🧳';
+    el.querySelector('.face')!.innerHTML = faceHtml(profile?.display_name, me ? faces[me] : undefined);
     meMarker.current.setLngLat([myPos.lng, myPos.lat]);
-  }, [myPos, profile, loaded]);
+  }, [myPos, profile, loaded, faces, me]);
 
   // tokens ilustrados: só no zoom de perto e só dentro da área vista
   const bKey = view ? view.b.toArray().flat().map((n) => n.toFixed(3)).join(',') : '';
@@ -438,7 +439,11 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
         }
         const el = mk.getElement();
         el.style.setProperty('--c', m.color);
-        el.querySelector('.face')!.textContent = m.avatar;
+        const face = el.querySelector('.face')!;
+        if (face.getAttribute('data-src') !== (faces[m.id] ?? '')) {
+          face.innerHTML = faceHtml(m.display_name, faces[m.id]);
+          face.setAttribute('data-src', faces[m.id] ?? '');
+        }
         el.querySelector('.tag')!.textContent = `${m.display_name} · ${fmtAgo(l.updated_at)}`;
         el.classList.toggle('stale', Date.now() - new Date(l.updated_at).getTime() > 15 * 60000);
         mk.setLngLat([l.lng, l.lat]);
@@ -450,7 +455,7 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
         friendMarkers.current.delete(id);
       }
     });
-  }, [members, locations, overlays.grupo, me, loaded]);
+  }, [members, locations, overlays.grupo, me, loaded, faces]);
 
   // lista "por perto": mais raros primeiro, depois os mais próximos
   const nearby = useMemo(() => {

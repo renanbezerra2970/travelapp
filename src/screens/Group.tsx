@@ -7,13 +7,14 @@ import { createMap, mapboxgl } from '../lib/mapbox';
 import { cityTheme, currentCity } from '../lib/trip';
 import { distance, fmtAgo, fmtDistance, mapsLink, walkMinutes, type LatLng } from '../lib/geo';
 import { Avatar } from '../components/ui';
+import { faceHtml } from '../lib/faces';
 import Ranking from '../components/Ranking';
 import Travelers from '../components/Travelers';
 
 const LIVE_MS = 15 * 60000;
 
 export default function Group({ nav }: { nav: Nav }) {
-  const { members, locations, myPos, posSource, sharing, setSharing, startGps, gpsError, session, profile, canManage, isAdmin, role } = useApp();
+  const { members, faces, locations, myPos, posSource, sharing, setSharing, startGps, gpsError, session, profile, canManage, isAdmin, role } = useApp();
   const me = session?.user.id;
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -69,7 +70,11 @@ export default function Group({ nav }: { nav: Nav }) {
       }
       const el = mk.getElement();
       el.style.setProperty('--c', p.m.color);
-      el.querySelector('.face')!.textContent = p.m.avatar;
+      const face = el.querySelector('.face')!;
+      if (face.getAttribute('data-src') !== (faces[p.m.id] ?? '')) {
+        face.innerHTML = faceHtml(p.m.display_name, faces[p.m.id]);
+        face.setAttribute('data-src', faces[p.m.id] ?? '');
+      }
       el.querySelector('.tag')!.textContent = p.m.id === me ? 'Você' : p.m.display_name;
       el.classList.toggle('stale', !!p.updated && Date.now() - new Date(p.updated).getTime() > LIVE_MS);
       mk.setLngLat([p.at.lng, p.at.lat]);
@@ -84,7 +89,7 @@ export default function Group({ nav }: { nav: Nav }) {
       fitted.current = true;
       map.fitBounds(bounds, { padding: 70, maxZoom: 16.5, duration: 0 });
     }
-  }, [people, me]);
+  }, [people, me, faces]);
 
   const focus = (at: LatLng) => {
     mapRef.current?.flyTo({ center: [at.lng, at.lat], zoom: 17, essential: true });
@@ -172,7 +177,7 @@ export default function Group({ nav }: { nav: Nav }) {
 
       <div className="section">
         <button className="card tap row" style={{ width: '100%', textAlign: 'left' }} onClick={() => nav.explore()}>
-          <span style={{ fontSize: 30 }}>{profile?.avatar}</span>
+          {profile && <Avatar p={profile} size="lg" />}
           <span className="grow"><b>Ver o grupo no mapa 3D</b><div className="small muted">No Explorar, os amigos aparecem junto com as lendas ao redor.</div></span>
         </button>
       </div>

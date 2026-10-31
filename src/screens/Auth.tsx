@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { invites, loginEmail, type InviteInfo } from '../lib/auth';
+import { uploadFace } from '../lib/faces';
+import { FacePicker } from '../components/ui';
 
-export const AVATARS = ['😎', '🌻', '🦁', '🎸', '🧳', '🍕', '🦊', '🐼', '🌊', '⚽', '📸', '🍷', '🚲', '🌵', '🐙', '👑'];
 export const COLORS = ['#E4572E', '#8B4FD8', '#2C7BE5', '#2E9E6A', '#E0A100', '#D63A7B', '#1F2A44'];
 
 export function AuthHero() {
@@ -70,7 +71,8 @@ function Claim({ token }: { token: string }) {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
-  const [avatar, setAvatar] = useState(AVATARS[0]);
+  const [face, setFace] = useState<{ blob: Blob; url: string } | null>(null);
+  const [later, setLater] = useState(false);
   const [color, setColor] = useState(COLORS[0]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -84,12 +86,14 @@ function Claim({ token }: { token: string }) {
     setErr(null);
     if (password.length < 6) return setErr('A senha precisa de pelo menos 6 caracteres.');
     if (password !== password2) return setErr('As senhas não conferem.');
+    if (!info?.reset && !face && !later) return setErr('Tire ou escolha uma foto do seu rosto — é como o grupo te encontra no mapa.');
     setBusy(true);
     try {
-      const r = await invites<{ email: string }>('claim', { token, password, avatar, color });
+      const r = await invites<{ email: string }>('claim', { token, password, avatar: '🙂', color });
       history.replaceState(null, '', location.pathname);
-      const { error } = await supabase.auth.signInWithPassword({ email: r.email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email: r.email, password });
       if (error) throw error;
+      if (face && data.user) await uploadFace(data.user.id, face.blob).catch(() => {});
     } catch (e: any) {
       setErr(e.message);
       setBusy(false);
@@ -117,15 +121,18 @@ function Claim({ token }: { token: string }) {
       <AuthHero />
       <form onSubmit={submit} className="stack" style={{ marginTop: 22 }}>
         <h2 style={{ fontSize: 26 }}>Olá, {info.display_name}! 👋</h2>
-        <p className="muted">{info.reset ? 'Crie uma nova senha para sua conta.' : `${roleText} Escolha seu avatar e crie uma senha — é só isso.`}</p>
+        <p className="muted">{info.reset ? 'Crie uma nova senha para sua conta.' : `${roleText} Tire uma foto do rosto e crie uma senha — é só isso.`}</p>
         <div className="pill" style={{ alignSelf: 'flex-start' }}>Seu login: <b>{info.display_name}</b></div>
         {!info.reset && (
           <>
             <div className="field">
-              <span>Seu avatar no mapa</span>
-              <div className="emoji-grid">
-                {AVATARS.map((a) => <button type="button" key={a} className={a === avatar ? 'on' : ''} onClick={() => setAvatar(a)}>{a}</button>)}
-              </div>
+              <span>Sua foto (rosto)</span>
+              <FacePicker value={face?.url} color={color} onPick={(blob, url) => setFace({ blob, url })} />
+              {!face && (
+                <label className="row tiny muted" style={{ gap: 6, marginTop: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={later} onChange={(e) => setLater(e.target.checked)} /> Adicionar a foto depois
+                </label>
+              )}
             </div>
             <div className="field">
               <span>Sua cor</span>

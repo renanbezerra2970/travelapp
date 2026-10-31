@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Session } from '@supabase/supabase-js';
 import { supabase, type MemberLocation, type PrivateData, type Profile } from '../lib/supabase';
 import { distance, type LatLng } from '../lib/geo';
+import { faceUrls } from '../lib/faces';
 
 export const DEMO = import.meta.env.DEV && new URLSearchParams(location.search).has('demo');
 
@@ -20,6 +21,8 @@ type Ctx = {
   canManage: boolean;
   privateData: PrivateData;
   members: Profile[];
+  /** URL assinada da foto do rosto, por usuário */
+  faces: Record<string, string>;
   locations: Record<string, MemberLocation>;
   checkins: Checkin[];
   myPos: LatLng | null;
@@ -134,7 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshTrip = useCallback(async () => {
     if (DEMO || !userId) return;
     const [{ data: prof }, { data: mem }] = await Promise.all([
-      supabase.from('profiles').select('id,display_name,avatar,color,is_admin,username').eq('id', userId).maybeSingle(),
+      supabase.from('profiles').select('id,display_name,avatar,avatar_path,color,is_admin,username').eq('id', userId).maybeSingle(),
       supabase.from('trip_members').select('trip_id,role').eq('user_id', userId).limit(1),
     ]);
     setProfile(prof ?? null);
@@ -160,7 +163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       const ids = (ms ?? []).map((m) => m.user_id);
       const { data: profs } = ids.length
-        ? await supabase.from('profiles').select('id,display_name,avatar,color,is_admin,username').in('id', ids)
+        ? await supabase.from('profiles').select('id,display_name,avatar,avatar_path,color,is_admin,username').in('id', ids)
         : { data: [] as Profile[] };
       setMembers(profs ?? []);
       setLocations(Object.fromEntries((locs ?? []).map((l: MemberLocation) => [l.user_id, l])));
@@ -172,6 +175,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (userId) refreshTrip();
   }, [userId, refreshTrip]);
+
+  // fotos de rosto: recarrega o perfil quando alguém troca a própria foto
+  useEffect(() => {
+    const h = () => refreshTrip();
+    window.addEventListener('profile-updated', h);
+    return () => window.removeEventListener('profile-updated', h);
+  }, [refreshTrip]);
+
+  const [faces, setFaces] = useState<Record<string, string>>({});
+  // modo demo: rostos de teste injetados via evento (não há upload sem conta)
+  useEffect(() => {
+    if (!DEMO) return;
+    const h = (e: Event) => {
+      const { id, url } = (e as CustomEvent<{ id: string; url: string }>).detail;
+      setFaces((f) => ({ ...f, [id]: url }));
+      if (id === DEMO_ME.id) setProfile((p) => (p ? { ...p, avatar_path: 'demo' } : p));
+    };
+    window.addEventListener('demo-face', h);
+    return () => window.removeEventListener('demo-face', h);
+  }, []);
+  useEffect(() => {
+    const people = [...members, ...(profile ? [profile] : [])].filter((p) => p.avatar_path);
+    if (DEMO || !people.length) return;
+    faceUrls(people.map((p) => p.avatar_path!)).then((u) => setFaces(Object.fromEntries(people.map((p) => [p.id, u[p.avatar_path!]]))));
+  }, [members, profile]);
 
   // ── Tempo real: localizações, capturas e novos membros ──
   useEffect(() => {
@@ -309,12 +337,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Ctx>(
     () => ({
-      ready, session, profile, tripId, tripName, privateData, members, locations, checkins,
+      ready, session, profile, tripId, tripName, privateData, members, faces, locations, checkins,
       myPos, myAccuracy: posSource === 'gps' ? gpsPos?.acc ?? null : null, posSource, gpsError,
       sharing, setSharing, startGps, simulate, capture, updateProfile, refreshTrip, signOut,
       role, isAdmin: !!profile?.is_admin, canManage: role === 'owner' || !!profile?.is_admin,
     }),
-    [ready, session, profile, tripId, tripName, role, privateData, members, locations, checkins, myPos, posSource, gpsPos, gpsError, sharing, setSharing, startGps, simulate, capture, updateProfile, refreshTrip, signOut],
+    [ready, session, profile, tripId, tripName, role, privateData, members, faces, locations, checkins, myPos, posSource, gpsPos, gpsError, sharing, setSharing, startGps, simulate, capture, updateProfile, refreshTrip, signOut],
   );
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

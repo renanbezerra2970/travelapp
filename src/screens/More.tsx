@@ -2,11 +2,12 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { ArrowLeft, ChevronRight, ExternalLink, Check, LogOut } from 'lucide-react';
 import { useApp, storage } from '../state/AppContext';
 import { brl, trip, type Block } from '../lib/trip';
-import { Avatar, Segs, toast } from '../components/ui';
+import { Avatar, FacePicker, Segs, toast } from '../components/ui';
 import Album from '../components/Album';
 import PoiSheet from '../components/PoiSheet';
 import { poiById } from '../data/pois';
-import { AVATARS, COLORS } from './Auth';
+import { COLORS } from './Auth';
+import { uploadFace } from '../lib/faces';
 import type { Nav } from '../App';
 
 type Page = 'perfil' | 'album' | 'transporte' | 'gastos' | 'checklist' | 'dicas' | 'docs';
@@ -48,7 +49,7 @@ export default function More({ nav }: { nav: Nav }) {
         {profile && <Avatar p={profile} size="lg" />}
         <span className="grow">
           <b style={{ fontSize: 17 }}>{profile?.display_name}</b>
-          <div className="small muted">Editar nome, avatar e cor</div>
+          <div className="small muted">Editar nome, foto e cor</div>
         </span>
         <ChevronRight size={18} color="var(--ink-3)" />
       </button>
@@ -79,22 +80,31 @@ export default function More({ nav }: { nav: Nav }) {
 }
 
 function ProfilePage() {
-  const { profile, updateProfile, signOut, session } = useApp();
+  const { profile, updateProfile, signOut, session, faces } = useApp();
   const [name, setName] = useState(profile?.display_name ?? '');
+  const [busy, setBusy] = useState(false);
   if (!profile) return null;
+  async function pick(blob: Blob) {
+    setBusy(true);
+    try {
+      await uploadFace(profile!.id, blob, profile!.avatar_path);
+      toast('Foto atualizada');
+    } catch (e: any) {
+      toast(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="stack">
-      <div className="row" style={{ justifyContent: 'center', padding: '8px 0' }}><Avatar p={profile} size="lg" /></div>
+      <div className="field">
+        <span>Sua foto</span>
+        <FacePicker value={faces[profile.id]} color={profile.color} busy={busy} onPick={(b) => pick(b)} />
+      </div>
       <label className="field">
         <span>Nome</span>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== profile.display_name && updateProfile({ display_name: name.trim() }).then(() => toast('Nome atualizado'))} />
       </label>
-      <div className="field">
-        <span>Avatar</span>
-        <div className="emoji-grid">
-          {AVATARS.map((a) => <button key={a} className={a === profile.avatar ? 'on' : ''} onClick={() => updateProfile({ avatar: a })}>{a}</button>)}
-        </div>
-      </div>
       <div className="field">
         <span>Cor no mapa</span>
         <div className="color-row">

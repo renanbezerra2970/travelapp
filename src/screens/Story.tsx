@@ -51,7 +51,7 @@ export function demoPhotos(): TripPhoto[] {
 
 /** Monta a entrada da colagem (fotos do grupo + lugares vistos por dia); usada na história e na colagem do dia */
 export function useStoryInput() {
-  const { tripId, members, checkins } = useApp();
+  const { tripId, members, checkins, faces } = useApp();
   const live = useTripPhotos(tripId);
   const photos = DEMO ? demoPhotos() : live.photos;
   const board = useLeaderboard();
@@ -109,9 +109,10 @@ export function useStoryInput() {
       totalPhotos: photos.length,
       totalSeen: checkins.filter((c) => c.kind === 'seen').length,
       km: Math.round(trip.cities.flatMap((c) => c.turnos).reduce((s, t) => s + t.km, 0)),
-      top: board.filter((r) => r.xp > 0).map((r) => ({ name: r.m.display_name, avatar: r.m.avatar, xp: r.xp })),
+      top: board.filter((r) => r.xp > 0).map((r) => ({ id: r.m.id, name: r.m.display_name, xp: r.xp })),
+      faces,
     };
-  }, [photos, urls, seenByDay, placeImgs, members, checkins, board]);
+  }, [photos, urls, seenByDay, placeImgs, members, checkins, board, faces]);
 
   return { input, photos };
 }

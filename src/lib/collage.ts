@@ -4,6 +4,7 @@
 import type { Profile } from './supabase';
 import type { TripPhoto } from './photos';
 import { cityTheme, trip } from './trip';
+import { initials } from './faces';
 
 const W = 1080;
 const H = 1920;
@@ -33,10 +34,50 @@ export type StoryInput = {
   totalPhotos: number;
   totalSeen: number;
   km: number;
-  top: { name: string; avatar: string; xp: number }[];
+  top: { id: string; name: string; xp: number }[];
+  /** URL da foto do rosto por usuário */
+  faces?: Record<string, string>;
 };
 
 type Card = { photos: StoryPhoto[]; places: StoryPlace[] };
+
+// rostos carregados uma vez por geração
+let FACES = new Map<string, HTMLImageElement | null>();
+async function loadFaces(s: StoryInput) {
+  FACES = new Map();
+  await Promise.all(s.members.map(async (m) => FACES.set(m.id, s.faces?.[m.id] ? await loadImage(s.faces[m.id]) : null)));
+}
+
+/** Rosto redondo com anel na cor do viajante (ou iniciais) */
+function drawFace(ctx: CanvasRenderingContext2D, p: Profile, cx: number, cy: number, r: number) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+  ctx.fillStyle = p.color;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  const img = FACES.get(p.id);
+  if (img) {
+    ctx.clip();
+    cover(ctx, img, cx - r, cy - r, r * 2, r * 2);
+  } else {
+    ctx.fillStyle = p.color;
+    ctx.font = `800 ${Math.round(r * 0.9)}px Inter`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(initials(p.display_name), cx, cy + 1);
+  }
+  ctx.restore();
+}
+
+/** Fileira de rostos; devolve a largura usada */
+function faceRow(ctx: CanvasRenderingContext2D, people: Profile[], x: number, cy: number, r: number, gap = 8) {
+  people.forEach((p, i) => drawFace(ctx, p, x + r + i * (r * 2 + gap), cy, r));
+  return people.length ? people.length * (r * 2 + gap) - gap : 0;
+}
 
 // ── utilidades de desenho ──
 function loadImage(url: string) {
@@ -113,7 +154,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 /** Foto "colada": moldura branca, leve rotação, sombra e hora */
-function polaroid(ctx: CanvasRenderingContext2D, img: HTMLImageElement, cx: number, cy: number, w: number, h: number, rot: number, label?: string) {
+function polaroid(ctx: CanvasRenderingContext2D, img: HTMLImageElement, cx: number, cy: number, w: number, h: number, rot: number, label?: string, who?: Profile) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate((rot * Math.PI) / 180);
@@ -126,9 +167,18 @@ function polaroid(ctx: CanvasRenderingContext2D, img: HTMLImageElement, cx: numb
   ctx.shadowColor = 'transparent';
   cover(ctx, img, -w / 2, -h / 2, w, h);
   if (label) {
+    let x = -w / 2;
+    if (who) {
+      drawFace(ctx, who, x + 15, h / 2 + 26, 15);
+      x += 40;
+    }
     ctx.fillStyle = '#5b6170';
     ctx.font = '400 24px Inter';
-    ctx.fillText(label, -w / 2, h / 2 + 34);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    let t = label;
+    while (ctx.measureText(t).width > w - (x + w / 2) && t.length > 4) t = `${t.slice(0, -2)}…`;
+    ctx.fillText(t, x, h / 2 + 34);
   }
   ctx.restore();
 }
@@ -245,9 +295,10 @@ function placeCard(ctx: CanvasRenderingContext2D, p: StoryPlace, img: HTMLImageE
   ctx.font = '400 25px Inter';
   wrap(ctx, p.story, tx, y + 102 + nl * 44 + 4, tw, 33, nl > 1 ? 2 : 3);
   if (p.who.length) {
-    ctx.fillStyle = '#1a1d26';
-    ctx.font = '600 24px Inter';
-    ctx.fillText(`👁 ${p.who.map((m) => m.avatar).join(' ')}`, tx, y + h - 26);
+    ctx.fillStyle = '#5b6170';
+    ctx.font = '600 22px Inter';
+    ctx.fillText('viram:', tx, y + h - 26);
+    faceRow(ctx, p.who.slice(0, 6), tx + 76, y + h - 34, 17, 6);
   }
 }
 
@@ -293,7 +344,7 @@ async function dayCard(d: DayStory, card: Card, k: number, total: number, member
       const p = card.photos[i];
       const who = members.find((m) => m.id === p.photo.user_id);
       const hh = new Date(p.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      polaroid(ctx, img, ...lay[i], `${who ? `${who.avatar} ${who.display_name} · ` : ''}${hh}${p.photo.caption ? ` · ${p.photo.caption.slice(0, 26)}` : ''}`);
+      polaroid(ctx, img, ...lay[i], `${who ? `${who.display_name} · ` : ''}${hh}${p.photo.caption ? ` · ${p.photo.caption}` : ''}`, who);
     });
   }
   const placeTop = imgs.length ? bottom - placesH : top + Math.max(0, (bottom - top - placesH) / 2);
@@ -352,14 +403,22 @@ async function coverFrame(s: StoryInput, mosaic: string[]): Promise<Blob> {
     ctx.fillText(l, x + 30, y + 118);
   });
   if (s.top.length) {
-    ctx.fillStyle = '#fff';
-    ctx.font = '600 32px Inter';
     const medals = ['🥇', '🥈', '🥉'];
-    ctx.fillText(s.top.slice(0, 3).map((t, i) => `${medals[i]} ${t.avatar} ${t.name}`).join('    '), 80, 1640);
+    let x = 80;
+    s.top.slice(0, 3).forEach((t, i) => {
+      const m = s.members.find((mm) => mm.id === t.id);
+      ctx.fillStyle = '#fff';
+      ctx.font = '600 32px Inter';
+      ctx.fillText(medals[i], x, 1652);
+      if (m) drawFace(ctx, m, x + 72, 1640, 24);
+      ctx.fillText(t.name, x + 106, 1652);
+      x += 106 + ctx.measureText(t.name).width + 44;
+    });
   }
+  const used = faceRow(ctx, s.members, 80, 1760, 30, 12);
   ctx.font = '400 28px Inter';
   ctx.fillStyle = 'rgba(255,255,255,.75)';
-  ctx.fillText(s.members.map((m) => `${m.avatar} ${m.display_name}`).join('  ·  '), 80, 1760);
+  ctx.fillText(s.members.map((m) => m.display_name).join(' · '), 80 + used + 20, 1770);
   return toJpeg(c);
 }
 
@@ -376,7 +435,9 @@ async function endFrame(s: StoryInput, cards: number): Promise<Blob> {
   ctx.font = '400 32px Inter';
   ctx.fillStyle = 'rgba(255,255,255,.75)';
   ctx.fillText(`${s.totalPhotos} fotos · ${s.totalSeen} descobertas · ${cards} capítulos`, W / 2, 1060);
-  ctx.fillText(s.members.map((m) => m.avatar).join('  '), W / 2, 1160);
+  const r = 44;
+  const total = s.members.length * (r * 2 + 16) - 16;
+  faceRow(ctx, s.members, (W - total) / 2, 1190, r, 16);
   return toJpeg(c);
 }
 
@@ -388,6 +449,7 @@ export function planStory(s: StoryInput) {
 /** Gera todos os quadros da história, em ordem */
 export async function buildStory(s: StoryInput, onProgress?: (done: number, total: number) => void): Promise<{ name: string; blob: Blob }[]> {
   await fonts();
+  await loadFaces(s);
   const plan = planStory(s);
   const nCards = plan.reduce((t, x) => t + x.cards.length, 0);
   const total = nCards + 2;
@@ -412,6 +474,7 @@ export async function buildStory(s: StoryInput, onProgress?: (done: number, tota
 /** Só os cards de um dia (colagem do dia, sob demanda) */
 export async function buildDayStory(s: StoryInput, dayIndex: number, onProgress?: (done: number, total: number) => void): Promise<{ name: string; blob: Blob }[]> {
   await fonts();
+  await loadFaces(s);
   const day = s.days.find((d) => d.index === dayIndex);
   if (!day) return [];
   const cards = planDay(day);

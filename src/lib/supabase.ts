@@ -10,6 +10,7 @@ export type Profile = {
   id: string;
   display_name: string;
   avatar: string;
+  avatar_path?: string | null;
   color: string;
   is_admin?: boolean;
   username?: string | null;
