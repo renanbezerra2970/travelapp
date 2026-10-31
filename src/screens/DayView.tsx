@@ -6,6 +6,7 @@ import { cityTheme, stopMeta, trip, turnoById } from '../lib/trip';
 import { createMap, mapboxgl } from '../lib/mapbox';
 import { mapsLink } from '../lib/geo';
 import DayPhotos from '../components/DayPhotos';
+import DayCollage from '../components/DayCollage';
 
 export default function DayView({ index, nav, onBack }: { index: number; nav: Nav; onBack: () => void }) {
   const { privateData } = useApp();
@@ -122,7 +123,8 @@ export default function DayView({ index, nav, onBack }: { index: number; nav: Na
         </>
       )}
 
-      <DayPhotos day={day.date} />
+      <DayPhotos day={day.date} onAlbum={() => nav.album()} />
+      <DayCollage dayIndex={index} />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { DEMO, useApp } from '../state/AppContext';
 import { signedUrls, useTripPhotos, type TripPhoto } from '../lib/photos';
 import { buildStory, planStory, type DayStory, type StoryInput } from '../lib/collage';
 import { poiById, RARITY } from '../data/pois';
-import { cityTheme, trip } from '../lib/trip';
+import { cityTheme, dayCityLabel, trip } from '../lib/trip';
 import { wikiForPlace } from '../lib/wiki';
 import { useLeaderboard } from '../components/Ranking';
 import { toast } from '../components/ui';
@@ -17,7 +17,7 @@ const ddmm = (iso: string) => {
 };
 const cityOf = (c: string) => c.split('→')[0].trim().split(' ')[0];
 
-function download(blob: Blob, name: string) {
+export function download(blob: Blob, name: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
@@ -25,25 +25,38 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
-/** Fotos fictícias para testar a colagem no modo demo */
-function demoPhotos(): TripPhoto[] {
-  const ds = ['30/10', '31/10', '31/10', '31/10', '31/10', '31/10', '01/11', '01/11', '01/11'];
-  return ds.map((day, i) => ({
-    id: `d${i}`, trip_id: 'demo', user_id: ['demo-me', 'demo-1', 'demo-2', 'demo-3'][i % 4], day, path: `https://picsum.photos/seed/euro${i}/1200/1500`,
-    caption: i === 1 ? 'Primeira vista da cúpula' : null, taken_at: new Date(2026, +day.slice(3) - 1, +day.slice(0, 2), 9 + i, 10).toISOString(),
-    lat: null, lng: null, width: 1200, height: 1500, favorite: i === 2, created_at: '',
+/** Fotos de exemplo (Wikimedia Commons, pessoas nos pontos da viagem) para o modo demo */
+const DEMO_FILES: [string, string, string?][] = [
+  ['30/10', 'Tourists at Belém Tower in Lisbon.jpg', 'Torre de Belém'], ['30/10', 'Inside Tram 28, Lisbon, April 2011 (Thomas Claveirole).jpg', 'Elétrico 28'],
+  ['30/10', 'Miradouro Santa Luzia (22355231242).jpg'], ['31/10', 'Vatican-tourists-queuing-at-St-Peter-6598.jpg', 'Fila do Vaticano'],
+  ['31/10', 'Turistas en la Plaza de San Pedro.JPG', 'Chegamos!'], ['31/10', 'Upon glancing at the Sistine Chapel.jpg', 'Sistina'],
+  ['31/10', 'Trastevere (162579858).jpg'], ['31/10', 'Sunset over Gianicolo and Vatican City (45894648504).jpg', 'Pôr do sol'],
+  ['01/11', 'Tourists at Trevi Fountain by Night (46806118051).jpg', 'Trevi à noite'], ['01/11', 'Pantheon-tourists-interior-Rome (2013).jpg'],
+  ['01/11', 'Spanish Steps (6256250262).jpg'], ['02/11', 'Tourists at La Bocca della Verità (5200662287).jpg', 'Bocca della Verità'],
+  ['02/11', 'Circus Maximus (15472125828).jpg'], ['03/11', 'Tourists in gondola.jpg', 'Gôndola'], ['03/11', 'Rialto Bridge (1).jpg'],
+  ['03/11', 'Tourists in Venice R01.jpg'], ['04/11', 'Colorful houses and gelato-eating tourists in burano.jpg', 'Burano'],
+  ['04/11', 'Tourism on the Canal in Burano (Venice).jpg'], ['05/11', 'Couple au Trocadero, Paris 18 Octobre 2013.jpg', 'Trocadéro'],
+  ['05/11', "Paris Parvis des Droits de l'homme towards Eiffel Tower.jpg"], ['07/11', 'Visitors of Louvre in front of Mona Lisa.jpg', 'Mona Lisa'],
+  ['07/11', 'Crowd looking at the Mona Lisa at the Louvre.jpg'], ['07/11', 'Sacré-Cœur Basilica - Main facade and white domes from the steps.jpg'],
+  ['08/11', 'France-000368C - Hall of Mirrors (14641986468).jpg', 'Galeria dos Espelhos'],
+];
+export function demoPhotos(): TripPhoto[] {
+  return DEMO_FILES.map(([day, file, caption], i) => ({
+    id: `d${i}`, trip_id: 'demo', user_id: ['demo-me', 'demo-1', 'demo-2', 'demo-3'][i % 4], day,
+    path: `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=900`,
+    caption: caption ?? null, taken_at: new Date(2026, +day.slice(3) - 1, +day.slice(0, 2), 9 + (i % 8), 10).toISOString(),
+    lat: null, lng: null, width: 900, height: 1200, favorite: i % 5 === 0, created_at: '',
   }));
 }
 
-export default function Story({ onBack }: { onBack: () => void }) {
-  const { tripId, members, checkins, isAdmin, canManage } = useApp();
+/** Monta a entrada da colagem (fotos do grupo + lugares vistos por dia); usada na história e na colagem do dia */
+export function useStoryInput() {
+  const { tripId, members, checkins } = useApp();
   const live = useTripPhotos(tripId);
   const photos = DEMO ? demoPhotos() : live.photos;
   const board = useLeaderboard();
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [placeImgs, setPlaceImgs] = useState<Record<string, string>>({});
-  const [frames, setFrames] = useState<{ name: string; blob: Blob; url: string }[]>([]);
-  const [progress, setProgress] = useState<string | null>(null);
 
   // URLs das fotos (originais, para a colagem ficar nítida)
   useEffect(() => {
@@ -82,7 +95,7 @@ export default function Story({ onBack }: { onBack: () => void }) {
       index,
       date: d.date,
       dow: d.dow,
-      city: cityOf(d.city),
+      city: dayCityLabel(d),
       title: d.title,
       photos: photos.filter((p) => p.day === d.date && urls[p.path]).map((p) => ({ photo: p, url: urls[p.path], time: new Date(p.taken_at ?? p.created_at).getTime() })),
       places: [...(seenByDay.get(d.date)?.entries() ?? [])].map(([id, v]) => {
@@ -100,6 +113,14 @@ export default function Story({ onBack }: { onBack: () => void }) {
     };
   }, [photos, urls, seenByDay, placeImgs, members, checkins, board]);
 
+  return { input, photos };
+}
+
+export default function Story({ onBack }: { onBack: () => void }) {
+  const { members, isAdmin, canManage } = useApp();
+  const { input, photos } = useStoryInput();
+  const [frames, setFrames] = useState<{ name: string; blob: Blob; url: string }[]>([]);
+  const [progress, setProgress] = useState<string | null>(null);
   const plan = useMemo(() => planStory(input), [input]);
   const nCards = plan.reduce((t, x) => t + x.cards.length, 0);
 
@@ -148,7 +169,7 @@ export default function Story({ onBack }: { onBack: () => void }) {
         <div className="list" style={{ marginTop: 14 }}>
           {plan.map(({ day, cards }) => (
             <div key={day.date} className="cost-row">
-              <span><b style={{ color: cityTheme(day.city).color }}>{day.date}</b> · {day.city}</span>
+              <span><b style={{ color: cityTheme(day.city.split(' → ')[0]).color }}>{day.date}</b> · {day.city}</span>
               <span className="small muted">{day.photos.length} fotos · {day.places.length} lugares → <b>{cards.length} card{cards.length > 1 ? 's' : ''}</b></span>
             </div>
           ))}

@@ -5,3 +5,4 @@ dist
 *.local.json
 .claude/
 *.tsbuildinfo
+exemplos-colagem/

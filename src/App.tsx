@@ -13,6 +13,7 @@ import Explore from './screens/Explore';
 import Group from './screens/Group';
 import More from './screens/More';
 import Story from './screens/Story';
+import PhotoAlbum from './screens/PhotoAlbum';
 
 export type Tab = 'home' | 'roteiro' | 'explorar' | 'grupo' | 'mais';
 export type Nav = {
@@ -20,6 +21,7 @@ export type Nav = {
   openDay: (i: number) => void;
   explore: (focus?: { poi?: string; at?: LatLng }) => void;
   story: () => void;
+  album: (mode?: 'all' | 'me') => void;
 };
 
 const TABS: { id: Tab; label: string; Icon: typeof Home }[] = [
@@ -35,6 +37,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(() => (location.hash.slice(1) as Tab) || 'home');
   const [day, setDay] = useState<number | null>(null);
   const [story, setStory] = useState(false);
+  const [album, setAlbum] = useState<'all' | 'me' | null>(null);
   const [focus, setFocus] = useState<{ poi?: string; at?: LatLng } | undefined>();
 
   const theme = cityTheme(currentCity());
@@ -68,6 +71,7 @@ export default function App() {
       setStory(true);
       window.scrollTo(0, 0);
     },
+    album: (mode = 'all') => setAlbum(mode),
   };
 
   return (
@@ -103,6 +107,7 @@ export default function App() {
           ),
         )}
       </nav>
+      {album && <PhotoAlbum initial={album} onBack={() => setAlbum(null)} />}
       <ToastHost />
     </div>
   );

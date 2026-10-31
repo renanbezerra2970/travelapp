@@ -53,6 +53,11 @@ export default function More({ nav }: { nav: Nav }) {
         <ChevronRight size={18} color="var(--ink-3)" />
       </button>
       <div className="list" style={{ marginTop: 16 }}>
+        <button className="list-item" onClick={() => nav.album()}>
+          <span style={{ fontSize: 24, width: 32, textAlign: 'center' }}>🖼️</span>
+          <span className="grow"><b>Álbum de fotos</b><div className="small muted">Coletivo e pessoal, num mural infinito</div></span>
+          <ChevronRight size={18} color="var(--ink-3)" />
+        </button>
         <button className="list-item" onClick={nav.story}>
           <span style={{ fontSize: 24, width: 32, textAlign: 'center' }}>🎬</span>
           <span className="grow"><b>A história da viagem</b><div className="small muted">Colagem das fotos e descobertas · material para o vídeo</div></span>

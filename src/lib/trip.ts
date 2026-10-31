@@ -100,4 +100,10 @@ export function currentCity(now = new Date()): string {
   return d.city.split(' ')[0].replace('→', '').trim() || 'Roma';
 }
 
+/** Cidades onde o dia acontece, pelos turnos (ex.: 05/11 → "Veneza → Paris") */
+export function dayCityLabel(d: Day): string {
+  const cs = [...new Set(d.turnos.map((id) => turnoById.get(id)?.city.name).filter(Boolean))] as string[];
+  return cs.length ? cs.join(' → ') : d.city.split('→')[0].trim().split(' ')[0];
+}
+
 export const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });

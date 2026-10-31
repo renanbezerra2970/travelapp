@@ -116,7 +116,7 @@ export default function HomeScreen({ nav }: { nav: Nav }) {
         </div>
       )}
 
-      {idx === dayI && <DayPhotos day={day.date} />}
+      {idx === dayI && <DayPhotos day={day.date} onAlbum={() => nav.album()} />}
 
       <button className="card tap row" style={{ width: '100%', textAlign: 'left', marginTop: 14 }} onClick={nav.story}>
         <span style={{ fontSize: 30 }}>🎬</span>

@@ -10,6 +10,9 @@ const H = 1920;
 const MAX_PER_DAY = 6;
 const PHOTOS_PER_CARD = 4;
 const PLACES_PER_CARD = 2;
+/** "Peso" de cada item no card: um lugar ocupa mais espaço que uma foto */
+const CARD_CAPACITY = 4;
+const PLACE_WEIGHT = 1.5;
 
 export type StoryPhoto = { photo: TripPhoto; url: string; time: number };
 export type StoryPlace = { id: string; name: string; emoji: string; kind: string; story: string; color: string; img?: string; time: number; who: Profile[] };
@@ -92,6 +95,13 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
   return n + 1;
 }
 
+/** Fonte do título que cabe na largura */
+function fitFont(ctx: CanvasRenderingContext2D, text: string, size: number, maxW: number) {
+  let s = size;
+  do ctx.font = `700 ${s}px Fraunces`;
+  while (ctx.measureText(text).width > maxW && (s -= 4) > 40);
+}
+
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -133,6 +143,28 @@ const LAYOUTS: Record<number, [number, number, number, number, number][]> = {
   4: [[310, 740, 450, 520, -4], [770, 800, 430, 500, 5], [320, 1330, 450, 520, 3], [770, 1380, 430, 500, -3]],
 };
 
+/** Grade arrumada para cards mistos (fotos + lugares): sem sobreposição, legendas visíveis */
+function gridLayout(n: number, top: number, height: number) {
+  const cols = n === 1 ? 1 : 2;
+  const rows = Math.ceil(n / cols);
+  const gap = 46;
+  const label = 50;
+  const maxW = (W - 200 - gap * (cols - 1)) / cols;
+  const cellH = Math.min((height - (rows - 1) * gap) / rows - label, maxW * 1.25);
+  const cellW = Math.min(maxW, cellH * (n === 1 ? 1.35 : 0.85));
+  const out: [number, number, number, number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const r = Math.floor(i / cols);
+    const inRow = Math.min(cols, n - r * cols);
+    const c = i % cols;
+    const rowW = inRow * cellW + (inRow - 1) * gap;
+    const x = (W - rowW) / 2 + cellW / 2 + c * (cellW + gap);
+    const y = top + cellH / 2 + 10 + r * (cellH + gap + label);
+    out.push([x, y, cellW, cellH, i % 2 ? 2.5 : -2.5]);
+  }
+  return out;
+}
+
 /** Encaixa o layout numa área menor (quando o card também tem lugares) */
 function fitLayout(n: number, top: number, height: number) {
   const s = height / AREA_H;
@@ -157,13 +189,17 @@ export function planDay(d: DayStory): Card[] {
   const items: Item[] = [...photos.map((p) => ({ t: p.time, photo: p })), ...places.map((p) => ({ t: p.time, place: p }))].sort((a, b) => a.t - b.t);
   const cards: Card[] = [];
   let cur: Card = { photos: [], places: [] };
+  let load = 0;
   for (const it of items) {
-    const full = it.photo ? cur.photos.length >= PHOTOS_PER_CARD : cur.places.length >= PLACES_PER_CARD;
+    const w = it.photo ? 1 : PLACE_WEIGHT;
+    const full = load + w > CARD_CAPACITY || (it.photo ? cur.photos.length >= PHOTOS_PER_CARD : cur.places.length >= PLACES_PER_CARD);
     if (full) {
       cards.push(cur);
       cur = { photos: [], places: [] };
+      load = 0;
     }
     it.photo ? cur.photos.push(it.photo) : cur.places.push(it.place!);
+    load += w;
   }
   if (cur.photos.length || cur.places.length) cards.push(cur);
   // se ainda passar do limite (muitos lugares), junta os lugares excedentes no último card
@@ -217,7 +253,7 @@ function placeCard(ctx: CanvasRenderingContext2D, p: StoryPlace, img: HTMLImageE
 
 async function dayCard(d: DayStory, card: Card, k: number, total: number, members: Profile[]): Promise<Blob> {
   const [c, ctx] = canvas();
-  const th = cityTheme(d.city);
+  const th = cityTheme(d.city.split(' → ')[0]);
   const g = ctx.createLinearGradient(0, 0, W, H);
   g.addColorStop(0, th.color);
   g.addColorStop(1, '#1f2a44');
@@ -234,13 +270,13 @@ async function dayCard(d: DayStory, card: Card, k: number, total: number, member
   ctx.fillStyle = '#fff';
   let top: number;
   if (first) {
-    ctx.font = '700 104px Fraunces';
+    fitFont(ctx, `${th.emoji} ${d.city}`, 104, W - 150);
     ctx.fillText(`${th.emoji} ${d.city}`, 76, 240);
     ctx.font = '500 44px Fraunces';
     const n = wrap(ctx, d.title, 80, 320, W - 160, 54, 2);
     top = 320 + n * 54 + 40;
   } else {
-    ctx.font = '700 64px Fraunces';
+    fitFont(ctx, `${th.emoji} ${d.city}`, 64, W - 150);
     ctx.fillText(`${th.emoji} ${d.city}`, 76, 200);
     top = 260;
   }
@@ -252,7 +288,7 @@ async function dayCard(d: DayStory, card: Card, k: number, total: number, member
 
   const imgs = (await Promise.all(card.photos.map((p) => loadImage(p.url)))).filter(Boolean) as HTMLImageElement[];
   if (imgs.length) {
-    const lay = card.places.length ? fitLayout(imgs.length, top + 20, photoH - 40) : fitLayout(imgs.length, top + 30, bottom - top - 60);
+    const lay = card.places.length ? gridLayout(imgs.length, top + 10, photoH - 50) : fitLayout(imgs.length, top + 30, bottom - top - 60);
     imgs.forEach((img, i) => {
       const p = card.photos[i];
       const who = members.find((m) => m.id === p.photo.user_id);
@@ -356,17 +392,33 @@ export async function buildStory(s: StoryInput, onProgress?: (done: number, tota
   const nCards = plan.reduce((t, x) => t + x.cards.length, 0);
   const total = nCards + 2;
   const out: { name: string; blob: Blob }[] = [];
-  const mosaic = plan.flatMap((x) => x.day.photos.filter((p) => p.photo.favorite).concat(x.day.photos).slice(0, 2).map((p) => p.url));
+  // mosaico da capa: favoritas primeiro, sem repetir, espalhadas pelos dias
+  const all = plan.flatMap((x) => x.day.photos);
+  const mosaic = [...new Set([...all.filter((p) => p.photo.favorite), ...all].map((p) => p.url))].slice(0, 9);
   out.push({ name: '00-capa.jpg', blob: await coverFrame(s, mosaic) });
   onProgress?.(1, total);
   for (const { day, cards } of plan) {
     for (let k = 0; k < cards.length; k++) {
-      const name = `${String(day.index + 1).padStart(2, '0')}-${day.date.replace('/', '-')}-${day.city.toLowerCase()}-${k + 1}.jpg`;
+      const name = `${String(day.index + 1).padStart(2, '0')}-${day.date.replace('/', '-')}-${day.city.toLowerCase().replace(/ → /g, "-")}-${k + 1}.jpg`;
       out.push({ name, blob: await dayCard(day, cards[k], k, cards.length, s.members) });
       onProgress?.(out.length, total);
     }
   }
   out.push({ name: '99-fim.jpg', blob: await endFrame(s, nCards) });
   onProgress?.(total, total);
+  return out;
+}
+
+/** Só os cards de um dia (colagem do dia, sob demanda) */
+export async function buildDayStory(s: StoryInput, dayIndex: number, onProgress?: (done: number, total: number) => void): Promise<{ name: string; blob: Blob }[]> {
+  await fonts();
+  const day = s.days.find((d) => d.index === dayIndex);
+  if (!day) return [];
+  const cards = planDay(day);
+  const out: { name: string; blob: Blob }[] = [];
+  for (let k = 0; k < cards.length; k++) {
+    out.push({ name: `dia-${String(day.index + 1).padStart(2, '0')}-${day.date.replace('/', '-')}-${k + 1}.jpg`, blob: await dayCard(day, cards[k], k, cards.length, s.members) });
+    onProgress?.(k + 1, cards.length);
+  }
   return out;
 }

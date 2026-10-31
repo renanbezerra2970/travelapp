@@ -5,7 +5,7 @@ import { deletePhoto, PHOTO_LIMIT, signedUrls, thumbPath, updatePhoto, uploadPho
 import { Avatar, Sheet, toast } from './ui';
 
 /** "Fotos do dia": cada viajante sobe até 20; todos veem as do grupo */
-export default function DayPhotos({ day, compact }: { day: string; compact?: boolean }) {
+export default function DayPhotos({ day, compact, onAlbum }: { day: string; compact?: boolean; onAlbum?: () => void }) {
   const { tripId, session, role, members, myPos } = useApp();
   const me = session?.user.id;
   const { photos, setPhotos } = useTripPhotos(tripId);
@@ -50,7 +50,10 @@ export default function DayPhotos({ day, compact }: { day: string; compact?: boo
     <div className={compact ? '' : 'section'}>
       <div className="section-title">
         <h2 style={{ fontSize: compact ? 20 : 22 }}>📸 Fotos do dia</h2>
-        {canPost && <span className="small muted">{mine}/{PHOTO_LIMIT} suas</span>}
+        <span className="row small" style={{ gap: 10 }}>
+          {canPost && <span className="muted">{mine}/{PHOTO_LIMIT} suas</span>}
+          {onAlbum && <button className="doc-link" onClick={onAlbum}>Álbum</button>}
+        </span>
       </div>
       {canPost && (
         <>
@@ -99,7 +102,7 @@ export default function DayPhotos({ day, compact }: { day: string; compact?: boo
   );
 }
 
-function Viewer({ list, index, onIndex, onClose, onDeleted, onChanged }: { list: TripPhoto[]; index: number; onIndex: (i: number) => void; onClose: () => void; onDeleted: (id: string) => void; onChanged: (p: TripPhoto) => void }) {
+export function Viewer({ list, index, onIndex, onClose, onDeleted, onChanged }: { list: TripPhoto[]; index: number; onIndex: (i: number) => void; onClose: () => void; onDeleted: (id: string) => void; onChanged: (p: TripPhoto) => void }) {
   const { members, session, isAdmin } = useApp();
   const p = list[index];
   const [url, setUrl] = useState('');
@@ -110,7 +113,8 @@ function Viewer({ list, index, onIndex, onClose, onDeleted, onChanged }: { list:
   useEffect(() => {
     setUrl('');
     setCaption(p.caption ?? '');
-    signedUrls([p.path]).then((u) => setUrl(u[p.path]));
+    if (/^https?:/.test(p.path)) setUrl(p.path); // fotos de exemplo (modo demo)
+    else signedUrls([p.path]).then((u) => setUrl(u[p.path]));
   }, [p]);
 
   return (

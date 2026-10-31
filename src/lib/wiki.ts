@@ -13,6 +13,20 @@ export type WikiNearby = { pageid: number; title: string; lat: number; lng: numb
 const API = 'https://pt.wikipedia.org/w/api.php';
 const REST = 'https://pt.wikipedia.org/api/rest_v1/page/summary/';
 const cache = new Map<string, Promise<WikiSummary | null>>();
+const NOT_PHOTO = /map|mapa|locator|location|localiza|\.svg|flag|bandeira|coat_of_arms|bras[ãa]o/i;
+
+async function englishImage(ptTitle: string): Promise<{ thumbnail?: string; image?: string } | null> {
+  try {
+    const u = `${API}?action=query&prop=langlinks&lllang=en&format=json&formatversion=2&origin=*&titles=${encodeURIComponent(ptTitle)}`;
+    const en = (await fetch(u).then((r) => r.json()))?.query?.pages?.[0]?.langlinks?.[0]?.title;
+    if (!en) return null;
+    const j = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(en.replace(/ /g, '_'))}`).then((r) => (r.ok ? r.json() : null));
+    const img = j?.originalimage?.source ?? j?.thumbnail?.source;
+    return img && !NOT_PHOTO.test(img) ? { thumbnail: j.thumbnail?.source, image: j.originalimage?.source } : null;
+  } catch {
+    return null;
+  }
+}
 
 export function wikiSummary(title: string): Promise<WikiSummary | null> {
   if (!cache.has(title)) {
@@ -20,17 +34,18 @@ export function wikiSummary(title: string): Promise<WikiSummary | null> {
       title,
       fetch(REST + encodeURIComponent(title.replace(/ /g, '_')))
         .then((r) => (r.ok ? r.json() : null))
-        .then((j) =>
-          j && j.type !== 'disambiguation' && j.extract
-            ? {
-                title: j.title,
-                extract: j.extract,
-                thumbnail: j.thumbnail?.source,
-                image: j.originalimage?.source,
-                url: j.content_urls?.mobile?.page ?? j.content_urls?.desktop?.page,
-              }
-            : null,
-        )
+        .then(async (j) => {
+          if (!j || j.type === 'disambiguation' || !j.extract) return null;
+          let thumbnail = j.thumbnail?.source as string | undefined;
+          let image = j.originalimage?.source as string | undefined;
+          // muitos artigos em português usam um mapa de localização como imagem: troca pela foto do artigo em inglês
+          if (!thumbnail || NOT_PHOTO.test(image ?? thumbnail)) {
+            const en = await englishImage(j.title);
+            thumbnail = en?.thumbnail;
+            image = en?.image;
+          }
+          return { title: j.title, extract: j.extract, thumbnail, image, url: j.content_urls?.mobile?.page ?? j.content_urls?.desktop?.page };
+        })
         .catch(() => null),
     );
   }
