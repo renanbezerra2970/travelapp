@@ -2,6 +2,7 @@
 // Coordenadas no local real de visita (ex.: a Pietà fica na 1ª capela à direita da nave).
 import { OBRAS } from './obras';
 import { RESTAURANTS } from './restaurants';
+import AMENITIES from './amenities.json';
 import WIKI from './pois-wiki.json';
 
 export type Rarity = 'lendario' | 'epico' | 'raro' | 'comum';
@@ -24,11 +25,20 @@ export type Poi = {
   obra?: boolean; // obra/objeto (não um lugar)
   source?: 'wiki'; // gerado a partir da Wikipédia (scripts/build-pois.mjs)
   food?: boolean;
+  /** Utilidade: banheiro ou água potável (dados do OpenStreetMap) */
+  amenity?: 'wc' | 'agua';
+  /** true = pago · false = grátis · null = não informado */
+  fee?: boolean | null;
+  hours?: string | null;
+  wheelchair?: string | null;
+  /** 'customers' = só para clientes do estabelecimento */
+  access?: string | null;
+  osm?: string;
   price?: '€' | '€€' | '€€€';
   addr?: string;
 };
 
-export type Category = 'monumentos' | 'igrejas' | 'museus' | 'obras' | 'natureza' | 'curiosidades' | 'comer';
+export type Category = 'monumentos' | 'igrejas' | 'museus' | 'obras' | 'natureza' | 'curiosidades' | 'comer' | 'banheiros' | 'agua';
 
 export const CATEGORIES: { id: Category; label: string; emoji: string }[] = [
   { id: 'monumentos', label: 'Monumentos', emoji: '🏛️' },
@@ -38,6 +48,8 @@ export const CATEGORIES: { id: Category; label: string; emoji: string }[] = [
   { id: 'natureza', label: 'Parques e vistas', emoji: '🌳' },
   { id: 'curiosidades', label: 'Curiosidades', emoji: '💡' },
   { id: 'comer', label: 'Restaurantes', emoji: '🍝' },
+  { id: 'banheiros', label: 'Banheiros', emoji: '🚻' },
+  { id: 'agua', label: 'Água potável', emoji: '🚰' },
 ];
 
 const CHURCH = /bas[íi]lica|catedral|capela|igreja|sinagoga|mosteiro|convento|cripta/i;
@@ -46,6 +58,7 @@ const NATURE = /jardim|mirante|colina|ilha|canal|parque/i;
 const CURIOUS = /curiosidade|segredo|ícone|livraria|caf[ée]|mercado|cabar[ée]|ci[êe]ncia|cemit[ée]rio|doçaria/i;
 
 export function categoryOf(p: Poi): Category {
+  if (p.amenity) return p.amenity === 'wc' ? 'banheiros' : 'agua';
   if (p.food) return 'comer';
   if (p.obra) return 'obras';
   if (CHURCH.test(p.kind)) return 'igrejas';
@@ -525,10 +538,34 @@ const CURATED: Poi[] = [
   },
 ];
 
-export const POIS: Poi[] = [...CURATED, ...OBRAS, ...RESTAURANTS, ...(WIKI as Omit<Poi, 'source'>[]).map((p) => ({ ...p, source: 'wiki' as const }))];
+/** Rótulo de preço de banheiro/água: "Grátis", "Pago · €1,50", "Para clientes" ou "Preço não informado" */
+export function feeLabel(p: Pick<Poi, 'fee' | 'price' | 'access' | 'amenity'>) {
+  if (p.access === 'customers') return p.fee === false ? 'Grátis para clientes' : 'Para clientes';
+  if (p.fee === false) return 'Grátis';
+  if (p.fee === true) return p.price ? `Pago · ${p.price}` : 'Pago';
+  return 'Preço não informado';
+}
+export const feeColor = (p: Pick<Poi, 'fee' | 'access'>) => (p.access === 'customers' ? '#7B61C9' : p.fee === false ? '#16A34A' : p.fee === true ? '#D97706' : '#6B7280');
+
+export const toAmenityPoi = (a: any): Poi => ({
+  ...a,
+  emoji: a.amenity === 'wc' ? '🚻' : '🚰',
+  kind: a.amenity === 'wc' ? 'Banheiro' : 'Água potável',
+  rarity: 'comum',
+});
+
+export const POIS: Poi[] = [
+  ...CURATED,
+  ...OBRAS,
+  ...RESTAURANTS,
+  ...(WIKI as Omit<Poi, 'source'>[]).map((p) => ({ ...p, source: 'wiki' as const })),
+  ...(AMENITIES as any[]).map(toAmenityPoi),
+];
+/** Só o que conta como descoberta (sem banheiros e água) — álbum, ranking, "perto de você" */
+export const isDiscovery = (p: Poi) => !p.amenity;
 
 export const poiById = new Map(POIS.map((p) => [p.id, p]));
 
 /** Pontos: "Vi" vale o XP da raridade; "Aprendi" (ler a história) vale metade; comer vale um bônus fixo */
 export const xpFor = (p: Poi, kind: 'seen' | 'learned') =>
-  p.food ? (kind === 'seen' ? 20 : 0) : kind === 'seen' ? RARITY[p.rarity].xp : Math.round(RARITY[p.rarity].xp / 2);
+  p.amenity ? 0 : p.food ? (kind === 'seen' ? 20 : 0) : kind === 'seen' ? RARITY[p.rarity].xp : Math.round(RARITY[p.rarity].xp / 2);

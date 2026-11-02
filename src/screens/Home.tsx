@@ -3,7 +3,7 @@ import { ArrowRight, Compass, Plane, BedDouble, Phone, ExternalLink, AlertTriang
 import type { Nav } from '../App';
 import { useApp } from '../state/AppContext';
 import { cityTheme, stopMeta, trip, todayIndex, turnoById, type Stop } from '../lib/trip';
-import { POIS, RARITY } from '../data/pois';
+import { isDiscovery, POIS, RARITY } from '../data/pois';
 import { distance, fmtAgo, fmtDistance } from '../lib/geo';
 import { Avatar, FacePicker, toast } from '../components/ui';
 import { uploadFace } from '../lib/faces';
@@ -38,7 +38,7 @@ export default function HomeScreen({ nav }: { nav: Nav }) {
 
   const nearby = useMemo(() => {
     if (!myPos) return [];
-    return POIS.map((p) => ({ p, d: distance(myPos, p) }))
+    return POIS.filter(isDiscovery).map((p) => ({ p, d: distance(myPos, p) }))
       .filter((x) => x.d < 1500)
       .sort((a, b) => a.d - b.d)
       .slice(0, 6);
@@ -109,7 +109,7 @@ export default function HomeScreen({ nav }: { nav: Nav }) {
         <div className="stat"><b>13</b><span>dias</span></div>
         <div className="stat"><b>4</b><span>cidades</span></div>
         <div className="stat"><b>{totalKm}</b><span>km a pé</span></div>
-        <div className="stat"><b>{POIS.length}</b><span>pontos</span></div>
+        <div className="stat"><b>{POIS.filter(isDiscovery).length}</b><span>pontos</span></div>
       </div>
 
       {day.alerts && day.alerts.length > 0 && (

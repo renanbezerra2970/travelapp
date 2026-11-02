@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useApp } from '../state/AppContext';
-import { CATEGORIES, categoryOf, POIS, RARITY, type Category, type Rarity } from '../data/pois';
+import { CATEGORIES, categoryOf, isDiscovery, POIS, RARITY, type Category, type Rarity } from '../data/pois';
 import { cityTheme, currentCity } from '../lib/trip';
 import Ranking, { LEVEL_XP, useLeaderboard } from './Ranking';
 
@@ -30,7 +30,7 @@ export default function Album({ onOpen }: { onOpen: (id: string) => void }) {
   const [tab, setTab] = useState<'album' | 'ranking'>('album');
   const [city, setCity] = useState<string>(currentCity());
   const [filter, setFilter] = useState<Category | 'tudo'>('tudo');
-  const list = POIS.filter((p) => p.city === city && (filter === 'tudo' || categoryOf(p) === filter)).sort(
+  const list = POIS.filter((p) => isDiscovery(p) && p.city === city && (filter === 'tudo' || categoryOf(p) === filter)).sort(
     (a, b) => ORDER.indexOf(a.rarity) - ORDER.indexOf(b.rarity) || Number(seen.has(b.id)) - Number(seen.has(a.id)),
   );
   const got = list.filter((p) => seen.has(p.id)).length;
@@ -68,7 +68,7 @@ export default function Album({ onOpen }: { onOpen: (id: string) => void }) {
           </div>
           <div className="chips" style={{ marginTop: 8 }}>
             <button className={`chip ${filter === 'tudo' ? 'on' : ''}`} onClick={() => setFilter('tudo')}>Tudo</button>
-            {CATEGORIES.map((c) => (
+            {CATEGORIES.filter((c) => c.id !== 'banheiros' && c.id !== 'agua').map((c) => (
               <button key={c.id} className={`chip ${c.id === filter ? 'on' : ''}`} onClick={() => setFilter(c.id)}>{c.emoji} {c.label}</button>
             ))}
           </div>

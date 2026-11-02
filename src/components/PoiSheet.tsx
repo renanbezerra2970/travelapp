@@ -1,12 +1,24 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { X, MapPin, BookOpen, Footprints, Sparkles, Check, Lock, Eye, GraduationCap } from 'lucide-react';
 import { useApp } from '../state/AppContext';
-import { poiById, RARITY, xpFor, type Poi } from '../data/pois';
+import { feeColor, feeLabel, poiById, RARITY, xpFor, type Poi } from '../data/pois';
 import { distance, fmtDistance, mapsLink, walkMinutes, type LatLng } from '../lib/geo';
 import { wikiForPlace, wikiSummary, type WikiSummary } from '../lib/wiki';
 import { Avatar, Confetti, Sheet, toast } from './ui';
 
 export const CAPTURE_RADIUS = 80;
+
+const DAYS: Record<string, string> = { Mo: 'seg', Tu: 'ter', We: 'qua', Th: 'qui', Fr: 'sex', Sa: 'sáb', Su: 'dom', PH: 'feriados' };
+/** opening_hours do OpenStreetMap em português simples */
+function formatHours(h: string) {
+  if (h.trim() === '24/7') return 'Aberto 24 horas';
+  return h
+    .replace(/Mo-Su/g, 'todos os dias')
+    .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, (d) => DAYS[d])
+    .replace(/(\d{2}:\d{2})-(\d{2}:\d{2})/g, '$1–$2')
+    .replace(/;\s*/g, ' · ')
+    .replace(/\boff\b/g, 'fechado');
+}
 /** Dentro de museus e igrejas o GPS erra muito: obras aceitam estar perto do prédio */
 const INSIDE_RADIUS = 150;
 
@@ -30,11 +42,13 @@ export default function PoiSheet({ target, onClose, onOpenPoi }: { target: Targe
   const poi = target.kind === 'poi' ? target.poi : null;
   const at: LatLng = poi ?? (target as LatLng);
   const title = poi?.name ?? (target as { title: string }).title;
-  const r = poi?.food ? { label: `Restaurante · ${poi.price}`, color: '#E4572E', glow: '', xp: 20 } : poi ? RARITY[poi.rarity] : { label: 'História', color: '#5B6170', glow: '', xp: 0 };
+  const r = poi?.amenity
+    ? { label: feeLabel(poi), color: poi.amenity === 'agua' ? '#2C7BE5' : feeColor(poi), glow: '', xp: 0 }
+    : poi?.food ? { label: `Restaurante · ${poi.price}`, color: '#E4572E', glow: '', xp: 20 } : poi ? RARITY[poi.rarity] : { label: 'História', color: '#5B6170', glow: '', xp: 0 };
 
   useEffect(() => {
     setWiki(undefined);
-    if (poi?.food) return setWiki(null);
+    if (poi?.food || poi?.amenity) return setWiki(null);
     const p = poi ? wikiForPlace(poi.wiki, poi) : wikiSummary((target as { title: string }).title);
     p.then(setWiki);
   }, [target]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -62,7 +76,7 @@ export default function PoiSheet({ target, onClose, onOpenPoi }: { target: Targe
     } else toast(`📖 Aprendido! +${xp} XP`);
   }
 
-  const img = poi?.food ? undefined : wiki?.image ?? wiki?.thumbnail;
+  const img = poi?.food || poi?.amenity ? undefined : wiki?.image ?? wiki?.thumbnail;
   // restaurantes: busca pelo nome + endereço (mais certeiro que a coordenada)
   const route = poi?.food
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${poi.name}, ${poi.addr}, ${poi.city}`)}`
@@ -91,7 +105,9 @@ export default function PoiSheet({ target, onClose, onOpenPoi }: { target: Targe
           <div className="poi-facts">
             <div><span>Distância</span><b>{dist === null ? '—' : fmtDistance(dist)}</b></div>
             <div><span>A pé</span><b>{dist === null ? '—' : `${walkMinutes(dist)} min`}</b></div>
-            {poi?.food ? (
+            {poi?.amenity ? (
+              <div><span>Preço</span><b style={{ color: feeColor(poi), fontSize: 13 }}>{feeLabel(poi)}</b></div>
+            ) : poi?.food ? (
               <div><span>Preço</span><b>{poi.price} <span style={{ fontSize: 11, color: 'var(--ink-3)', textTransform: 'none', letterSpacing: 0 }}>{poi.price === '€' ? 'até €15' : poi.price === '€€' ? '€15–40' : '€40+'}</span></b></div>
             ) : (
             <div><span>{poi?.year ? 'Época' : 'Vale'}</span><b style={{ fontSize: poi?.year && poi.year.length > 12 ? 12 : 14 }}>{poi?.year ?? (poi ? `${xpFor(poi, 'seen') + xpFor(poi, 'learned')} XP` : '—')}</b></div>
@@ -102,7 +118,23 @@ export default function PoiSheet({ target, onClose, onOpenPoi }: { target: Targe
             <button className="chip" style={{ marginTop: 14 }} onClick={() => onOpenPoi(parent.id)}>📍 Fica em: {parent.name}</button>
           )}
 
-          {poi && (
+          {poi?.amenity && (
+            <div className="amenity-info">
+              <div className="fee-badge" style={{ background: feeColor(poi) }}>
+                {poi.fee === false && poi.access !== 'customers' ? '✓ ' : ''}{feeLabel(poi)}
+              </div>
+              <dl className="kv" style={{ marginTop: 14 }}>
+                <dt>Horário</dt><dd>{poi.hours ? formatHours(poi.hours) : 'Não informado'}</dd>
+                {poi.amenity === 'wc' && (<><dt>Acessível</dt><dd>{poi.wheelchair === 'yes' ? 'Sim, para cadeira de rodas' : poi.wheelchair === 'limited' ? 'Parcialmente' : poi.wheelchair === 'no' ? 'Não' : 'Não informado'}</dd></>)}
+                {poi.access === 'customers' && (<><dt>Acesso</dt><dd>Só para clientes — compre um café ou uma água para usar</dd></>)}
+              </dl>
+              <p className="story" style={{ marginTop: 12, fontSize: 15 }}>{poi.story}</p>
+              {poi.fee == null && poi.amenity === 'wc' && <div className="tip" style={{ marginTop: 10 }}><span>💡</span><span>O mapa não informa se é pago. Leve umas moedas: banheiros públicos na Itália costumam custar €1–1,50.</span></div>}
+              <div className="tiny muted" style={{ marginTop: 10 }}>Dados do OpenStreetMap{poi.osm ? <> · <a href={`https://www.openstreetmap.org/${poi.osm}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>ver/corrigir</a></> : null}</div>
+            </div>
+          )}
+
+          {poi && !poi.amenity && (
             <>
               <h3 style={{ marginTop: 22, fontSize: 19 }}>{poi.food ? 'Por que vale a pena' : 'A história'}</h3>
               {poi.addr && <div className="small muted" style={{ marginTop: 4 }}>📍 {poi.addr}</div>}
@@ -166,7 +198,7 @@ export default function PoiSheet({ target, onClose, onOpenPoi }: { target: Targe
           )}
 
           <div className="capture-bar">
-            {poi && traveler ? (
+            {poi && traveler && !poi.amenity ? (
               mineSeen ? (
                 <div className="btn block light" style={{ color: 'var(--ok)' }}><Check size={20} /> {poi.food ? 'Você comeu aqui' : 'Você viu'} · +{xpFor(poi, 'seen')} XP</div>
               ) : inRange ? (

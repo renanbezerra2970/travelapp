@@ -363,3 +363,10 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.0
 .face-actions { display: flex; flex-direction: column; gap: 8px; }
 .me-mk .face img, .friend-mk .face img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .me-mk .face b, .friend-mk .face b { font: 800 15px/1 var(--ui); color: var(--c); }
+
+/* ── banheiros e água ── */
+.chip.util { border-style: dashed; }
+.chip.util.on { background: #0E7C86; border-color: #0E7C86; color: #fff; border-style: solid; }
+.util-btn { font-size: 20px; }
+.amenity-info { margin-top: 18px; }
+.fee-badge { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; color: #fff; font-weight: 800; font-size: 15px; letter-spacing: .01em; }

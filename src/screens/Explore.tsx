@@ -3,7 +3,8 @@ import { LocateFixed, Trophy, Navigation, MapPinned, X, Layers as LayersIcon, Sl
 import type { Nav } from '../App';
 import { storage, useApp } from '../state/AppContext';
 import { createMap, mapboxgl, presetForNow } from '../lib/mapbox';
-import { CATEGORIES, categoryOf, POIS, poiById, RARITY, type Category, type Poi } from '../data/pois';
+import { CATEGORIES, categoryOf, feeColor, feeLabel, POIS, poiById, RARITY, type Category, type Poi } from '../data/pois';
+import { liveNearby } from '../lib/amenities';
 import { CITY_THEME, cityTheme, currentCity, todayIndex, trip, turnoById } from '../lib/trip';
 import { circlePolygon, distance, fmtAgo, fmtDistance, type LatLng } from '../lib/geo';
 import { wikiNearby, type WikiNearby } from '../lib/wiki';
@@ -15,7 +16,9 @@ import { faceHtml } from '../lib/faces';
 const NEAR_RADIUS = 700;
 /** Abaixo deste zoom o mapa mostra agrupamentos (concentrações) em vez dos tokens */
 const TOKEN_ZOOM = 15;
-const ALL_CATS = CATEGORIES.map((c) => c.id);
+const UTILITY: Category[] = ['banheiros', 'agua'];
+/** Categorias de descoberta ("Tudo"); banheiros e água são camadas à parte, ligadas sob demanda */
+const ALL_CATS = CATEGORIES.map((c) => c.id).filter((c) => !UTILITY.includes(c));
 type Overlays = { wiki: boolean; roteiro: boolean; grupo: boolean };
 
 const TELEPORTS: { city: string; name: string; at: LatLng }[] = [
@@ -70,6 +73,8 @@ const loadCats = (): Set<Category> => {
   return new Set(ALL_CATS);
 };
 
+const amenityLabel = (p: Poi) => `${p.amenity === 'wc' ? 'WC' : 'Água'} · ${feeLabel(p)}`;
+
 export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi?: string; at?: LatLng }; clearFocus: () => void }) {
   const { myPos, posSource, startGps, simulate, gpsError, profile, members, faces, locations, checkins, session, myAccuracy } = useApp();
   const mapEl = useRef<HTMLDivElement>(null);
@@ -97,22 +102,27 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
   const ref: LatLng | null = follow && myPos ? myPos : center ?? myPos;
   const tokens = zoom >= TOKEN_ZOOM;
 
-  const shown = useMemo(() => POIS.filter((p) => cats.has(categoryOf(p))), [cats]);
+  const [live, setLive] = useState<Poi[]>([]);
+  const byId = useMemo(() => new Map<string, Poi>([...poiById, ...live.map((p) => [p.id, p] as [string, Poi])]), [live]);
+  const shown = useMemo(() => [...POIS, ...live].filter((p) => cats.has(categoryOf(p))), [cats, live]);
 
   const saveCats = (n: Set<Category>) => {
     storage.set('exploreCats', JSON.stringify([...n]));
     setCats(n);
   };
+  const utilOn = UTILITY.filter((c) => cats.has(c));
   const toggleCat = (c: Category) => {
     const n = new Set(cats);
     n.has(c) ? n.delete(c) : n.add(c);
-    if (!n.size) ALL_CATS.forEach((x) => n.add(x));
+    if (!UTILITY.includes(c) && ![...n].some((x) => !UTILITY.includes(x))) ALL_CATS.forEach((x) => n.add(x));
     saveCats(n);
   };
-  const onlyCat = (c: Category | 'all') => saveCats(new Set<Category>(c === 'all' ? ALL_CATS : [c]));
+  const onlyCat = (c: Category | 'all') => saveCats(new Set<Category>([...(c === 'all' ? ALL_CATS : [c]), ...utilOn]));
 
+  const byIdRef = useRef(byId);
+  byIdRef.current = byId;
   const openPoi = useCallback((id: string) => {
-    const p = poiById.get(id);
+    const p = byIdRef.current.get(id);
     if (!p) return;
     setSelId(id);
     setTarget({ kind: 'poi', poi: p });
@@ -173,7 +183,7 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
       map.addLayer({
         id: 'poi-dots', type: 'circle', source: 'pois', slot: 'top', filter: ['all', ['!', ['has', 'point_count']], far],
         paint: {
-          'circle-color': ['match', ['get', 'cat'], 'comer', '#E4572E', ['match', ['get', 'rarity'], 'lendario', RARITY.lendario.color, 'epico', RARITY.epico.color, 'raro', RARITY.raro.color, RARITY.comum.color]],
+          'circle-color': ['match', ['get', 'cat'], 'comer', '#E4572E', 'banheiros', '#0E7C86', 'agua', '#2C7BE5', ['match', ['get', 'rarity'], 'lendario', RARITY.lendario.color, 'epico', RARITY.epico.color, 'raro', RARITY.raro.color, RARITY.comum.color]],
           'circle-radius': ['match', ['get', 'rarity'], 'lendario', 9, 'epico', 7.5, 6],
           'circle-stroke-width': 2.5,
           'circle-stroke-color': '#fff',
@@ -312,7 +322,8 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
     visible.forEach((p, i) => {
       if (poiMarkers.current.has(p.id)) return;
       const r = RARITY[p.rarity];
-      const el = tokenEl(p.emoji, p.food ? '#E4572E' : r.color, p.food ? 'rgba(228,87,46,.4)' : r.glow, p.name, i, !!p.inside || !!p.food || (p.source === 'wiki' && p.rarity === 'comum'));
+      const color = p.amenity ? (p.amenity === 'agua' ? '#2C7BE5' : feeColor(p)) : p.food ? '#E4572E' : r.color;
+      const el = tokenEl(p.emoji, color, p.amenity || p.food ? `${color}66` : r.glow, p.amenity ? amenityLabel(p) : p.name, i, !!p.inside || !!p.food || !!p.amenity || (p.source === 'wiki' && p.rarity === 'comum'));
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         openPoi(p.id);
@@ -331,7 +342,8 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
 
   useEffect(() => {
     poiMarkers.current.forEach((m, id) => {
-      const p = poiById.get(id)!;
+      const p = byId.get(id);
+      if (!p) return;
       const el = m.getElement();
       const reach = captureReach(p, myPos);
       const can = reach.d !== null && reach.d <= reach.radius;
@@ -339,9 +351,9 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
       el.classList.toggle('far', myPos ? distance(myPos, p) > NEAR_RADIUS : false);
       el.classList.toggle('sel', selId === id);
       // obras dentro de prédios e pontos menores só aparecem chegando mais perto
-      const minZoom = p.inside ? 16.4 : p.rarity === 'comum' && !p.food ? 15.6 : 0;
+      const minZoom = p.inside ? 16.4 : p.rarity === 'comum' && !p.food && !p.amenity ? 15.6 : 0;
       el.style.display = zoom >= minZoom ? '' : 'none';
-      el.querySelector('.label')!.toggleAttribute('hidden', zoom < (p.rarity === 'lendario' || p.rarity === 'epico' ? 16.2 : 17.3));
+      el.querySelector('.label')!.toggleAttribute('hidden', zoom < (p.rarity === 'lendario' || p.rarity === 'epico' || p.amenity ? 16.2 : 17.3));
       let badge = el.querySelector('.check, .bang');
       const want = myCaptures.has(id) ? 'check' : can ? 'bang' : null;
       if (badge && badge.className !== want) {
@@ -462,22 +474,52 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
     if (!ref) return [];
     const from = myPos ?? ref;
     const order = { lendario: 0, epico: 1, raro: 2, comum: 3 } as const;
+    // banheiros/água vão para o fim da lista, a não ser que só eles estejam ligados
+    const onlyUtil = ![...cats].some((c) => !UTILITY.includes(c));
+    const score = (x: { r: number; poi: Poi | null }) => x.r + order[x.poi!.rarity] * 120 + (x.poi!.amenity && !onlyUtil ? 2000 : 0);
     const cur = shown
       .filter((p) => distance(ref, p) < NEAR_RADIUS)
       .map((p) => ({ key: p.id, poi: p as Poi | null, w: null as WikiNearby | null, d: distance(from, p), r: distance(ref, p) }))
-      .sort((a, b) => a.r + order[a.poi!.rarity] * 120 - (b.r + order[b.poi!.rarity] * 120))
+      .sort((a, b) => score(a) - score(b))
       .slice(0, 30);
     const wk = overlays.wiki
       ? wikiItems.filter((w) => distance(ref, w) < NEAR_RADIUS).map((w) => ({ key: `w${w.pageid}`, poi: null, w, d: distance(from, w), r: distance(ref, w) })).sort((a, b) => a.r - b.r).slice(0, 10)
       : [];
     return [...cur, ...wk];
-  }, [ref, myPos, wikiItems, overlays.wiki, shown]);
+  }, [ref, myPos, wikiItems, overlays.wiki, shown, cats]);
 
   const inView = useMemo(() => (view ? shown.filter((p) => view.b.contains([p.lng, p.lat])).length : 0), [bKey, shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const city = ref ? nearestCity(ref) : null;
   const flyTo = (p: LatLng, z = 16.8) => mapRef.current?.flyTo({ center: [p.lng, p.lat], zoom: z, pitch: 62, essential: true });
-  const allOn = cats.size === ALL_CATS.length;
+  const allOn = ALL_CATS.every((c) => cats.has(c));
+  const [finding, setFinding] = useState<'wc' | 'agua' | null>(null);
+
+  /** Banheiro / água mais próximo: liga a camada, voa até ele e abre a ficha (busca ao vivo se o catálogo não tiver) */
+  async function findNearest(kind: 'wc' | 'agua') {
+    const from = myPos ?? center;
+    if (!from) return;
+    const cat: Category = kind === 'wc' ? 'banheiros' : 'agua';
+    if (!cats.has(cat)) saveCats(new Set([...cats, cat]));
+    const pick = (list: Poi[]) => list.filter((p) => p.amenity === kind).map((p) => ({ p, d: distance(from, p) })).sort((a, b) => a.d - b.d)[0];
+    let best = pick([...POIS, ...live]);
+    if (!best || best.d > 700) {
+      setFinding(kind);
+      const found = await liveNearby(kind, from);
+      setFinding(null);
+      if (found.length) {
+        setLive((s) => [...s.filter((x) => !found.some((f) => f.id === x.id)), ...found]);
+        const b2 = pick(found);
+        if (b2 && (!best || b2.d < best.d)) best = b2;
+      }
+    }
+    if (!best) return toast(kind === 'wc' ? 'Nenhum banheiro encontrado por perto (ou o OpenStreetMap não respondeu). Tente de novo em instantes.' : 'Nenhum ponto de água encontrado por perto (ou o OpenStreetMap não respondeu). Tente de novo em instantes.');
+    setFollow(false);
+    flyTo(best.p, 17.4);
+    setSelId(best.p.id);
+    setTarget({ kind: 'poi', poi: best.p });
+    toast(`${kind === 'wc' ? '🚻 Banheiro' : '🚰 Água'} a ${fmtDistance(best.d)} · ${feeLabel(best.p)}`);
+  }
   const showCarousel = nearby.length > 0 && tokens;
 
   return (
@@ -495,8 +537,13 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
         </div>
         <div className="chips">
           <button className={`chip ${allOn ? 'on' : ''}`} onClick={() => onlyCat('all')}>Tudo</button>
-          {CATEGORIES.map((c) => (
+          {CATEGORIES.filter((c) => !UTILITY.includes(c.id)).map((c) => (
             <button key={c.id} className={`chip ${!allOn && cats.has(c.id) ? 'on' : ''}`} onClick={() => (allOn ? onlyCat(c.id) : toggleCat(c.id))}>
+              {c.emoji} {c.label}
+            </button>
+          ))}
+          {CATEGORIES.filter((c) => UTILITY.includes(c.id)).map((c) => (
+            <button key={c.id} className={`chip util ${cats.has(c.id) ? 'on' : ''}`} onClick={() => toggleCat(c.id)}>
               {c.emoji} {c.label}
             </button>
           ))}
@@ -535,6 +582,12 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
         >
           <LayersIcon size={20} />
         </button>
+        <button className="icon-btn util-btn" onClick={() => findNearest('wc')} aria-label="Banheiro mais próximo" title="Banheiro mais próximo" disabled={!!finding}>
+          {finding === 'wc' ? <span className="spinner" style={{ width: 18, height: 18 }} /> : '🚻'}
+        </button>
+        <button className="icon-btn util-btn" onClick={() => findNearest('agua')} aria-label="Água mais próxima" title="Água potável mais próxima" disabled={!!finding}>
+          {finding === 'agua' ? <span className="spinner" style={{ width: 18, height: 18 }} /> : '🚰'}
+        </button>
         <button className="icon-btn" onClick={() => setSheet('teleport')} aria-label="Ir para um lugar"><MapPinned size={20} /></button>
         <button
           className="icon-btn"
@@ -554,9 +607,9 @@ export default function Explore({ focus, clearFocus }: { nav: Nav; focus?: { poi
         <div className="carousel">
           {nearby.map((x) => {
             const p = x.poi;
-            const r = p ? (p.food ? { color: '#E4572E', label: `${p.kind} · ${p.price}` } : RARITY[p.rarity]) : { color: '#5B6170', label: 'História' };
+            const r = p ? (p.amenity ? { color: p.amenity === 'agua' ? '#2C7BE5' : feeColor(p), label: amenityLabel(p) } : p.food ? { color: '#E4572E', label: `${p.kind} · ${p.price}` } : RARITY[p.rarity]) : { color: '#5B6170', label: 'História' };
             const reach = p ? captureReach(p, myPos) : null;
-            const inRange = !!p && !myCaptures.has(p.id) && reach!.d !== null && reach!.d <= reach!.radius;
+            const inRange = !!p && !p.amenity && !myCaptures.has(p.id) && reach!.d !== null && reach!.d <= reach!.radius;
             return (
               <button
                 key={x.key}
