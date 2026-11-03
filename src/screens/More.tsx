@@ -1,5 +1,6 @@
-import { Fragment, useState, type ReactNode } from 'react';
-import { ArrowLeft, ChevronRight, ExternalLink, Check, LogOut } from 'lucide-react';
+import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
+import { ArrowLeft, ChevronRight, ExternalLink, Check, KeyRound, LogOut } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { useApp, storage } from '../state/AppContext';
 import { brl, trip, type Block } from '../lib/trip';
 import { Avatar, FacePicker, Segs, toast } from '../components/ui';
@@ -50,7 +51,7 @@ export default function More({ nav }: { nav: Nav }) {
         {profile && <Avatar p={profile} size="lg" />}
         <span className="grow">
           <b style={{ fontSize: 17 }}>{profile?.display_name}</b>
-          <div className="small muted">Editar nome, foto e cor</div>
+          <div className="small muted">Editar foto, nome, cor e senha</div>
         </span>
         <ChevronRight size={18} color="var(--ink-3)" />
       </button>
@@ -121,9 +122,61 @@ function ProfilePage() {
           {COLORS.map((c) => <button key={c} className={c === profile.color ? 'on' : ''} style={{ background: c }} onClick={() => updateProfile({ color: c })} aria-label={c} />)}
         </div>
       </div>
-      <div className="small muted">{session?.user.email}</div>
+      <ChangePassword email={session?.user.email ?? ''} />
+      <div className="small muted">Para entrar: <b>{profile.display_name}</b> + sua senha</div>
       <button className="btn light block" style={{ marginTop: 20, color: 'var(--danger)' }} onClick={signOut}><LogOut size={18} /> Sair</button>
     </div>
+  );
+}
+
+function ChangePassword({ email }: { email: string }) {
+  const [open, setOpen] = useState(false);
+  const [cur, setCur] = useState('');
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!open) return <button className="btn light block" onClick={() => setOpen(true)}><KeyRound size={18} /> Mudar senha</button>;
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setErr('');
+    if (pw.length < 6) return setErr('A nova senha precisa de pelo menos 6 caracteres.');
+    if (pw !== pw2) return setErr('As senhas não conferem.');
+    setBusy(true);
+    const { error: e1 } = await supabase.auth.signInWithPassword({ email, password: cur });
+    if (e1) {
+      setBusy(false);
+      return setErr('Senha atual incorreta.');
+    }
+    const { error: e2 } = await supabase.auth.updateUser({ password: pw });
+    setBusy(false);
+    if (e2) return setErr(e2.message.includes('different') ? 'A nova senha precisa ser diferente da atual.' : e2.message);
+    toast('Senha alterada');
+    setOpen(false);
+    setCur(''); setPw(''); setPw2('');
+  }
+  return (
+    <form className="card stack" onSubmit={save}>
+      <b>Mudar senha</b>
+      <label className="field">
+        <span>Senha atual</span>
+        <input className="input" type="password" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password" required />
+      </label>
+      <label className="field">
+        <span>Nova senha</span>
+        <input className="input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" minLength={6} required />
+      </label>
+      <label className="field">
+        <span>Repita a nova senha</span>
+        <input className="input" type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" minLength={6} required />
+      </label>
+      {err && <div className="small" style={{ color: 'var(--danger)' }}>{err}</div>}
+      <div className="row">
+        <button type="button" className="btn light grow" onClick={() => { setOpen(false); setErr(''); }}>Cancelar</button>
+        <button className="btn grow" disabled={busy}>{busy ? 'Salvando…' : 'Salvar'}</button>
+      </div>
+      <div className="small muted">Esqueceu a senha atual? Peça um link novo ao líder da viagem.</div>
+    </form>
   );
 }
 
