@@ -9,6 +9,7 @@ import { poiById } from '../data/pois';
 import { COLORS } from './Auth';
 import { uploadFace } from '../lib/faces';
 import type { Nav } from '../App';
+import { APK_URL, isAndroidBrowser } from '../lib/native';
 
 type Page = 'perfil' | 'album' | 'transporte' | 'gastos' | 'checklist' | 'dicas' | 'docs';
 
@@ -53,6 +54,15 @@ export default function More({ nav }: { nav: Nav }) {
         </span>
         <ChevronRight size={18} color="var(--ink-3)" />
       </button>
+      {isAndroidBrowser && (
+        <div className="card" style={{ marginTop: 16, borderLeft: '5px solid var(--ok)' }}>
+          <b>📱 Instale o app Android</b>
+          <div className="small muted" style={{ margin: '4px 0 10px' }}>
+            Com o app, sua localização continua indo para o grupo mesmo com a tela desligada. Fora da Play Store: baixe, abra o arquivo e permita "instalar apps desconhecidos" quando o Android pedir.
+          </div>
+          <a className="btn block" href={APK_URL} download>Baixar o app (APK)</a>
+        </div>
+      )}
       <div className="list" style={{ marginTop: 16 }}>
         <button className="list-item" onClick={() => nav.album()}>
           <span style={{ fontSize: 24, width: 32, textAlign: 'center' }}>🖼️</span>

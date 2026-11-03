@@ -8,6 +8,7 @@ import { cityTheme, currentCity } from '../lib/trip';
 import { distance, fmtAgo, fmtDistance, mapsLink, walkMinutes, type LatLng } from '../lib/geo';
 import { Avatar } from '../components/ui';
 import { faceHtml } from '../lib/faces';
+import { APK_URL, isAndroidBrowser, isNative } from '../lib/native';
 import Ranking from '../components/Ranking';
 import Travelers from '../components/Travelers';
 
@@ -122,7 +123,9 @@ export default function Group({ nav }: { nav: Nav }) {
                 : posSource === 'sim'
                   ? 'Usando posição simulada (Explorar).'
                   : myPos
-                    ? 'Visível só para quem está na viagem. Mantenha o app aberto.'
+                    ? isNative
+                      ? 'Visível só para quem está na viagem. Continua mesmo com a tela desligada (notificação fixa).'
+                      : 'Visível só para quem está na viagem. Mantenha o app aberto.'
                     : 'Aguardando o GPS…'}
           </div>
         </div>
@@ -159,7 +162,10 @@ export default function Group({ nav }: { nav: Nav }) {
           })}
         </div>
         <p className="tiny muted" style={{ marginTop: 8 }}>
-          No navegador, a localização é enviada enquanto o app está aberto na tela. Instale na tela inicial para acesso rápido.
+          {isNative
+            ? 'No app Android a posição segue sendo enviada em segundo plano enquanto o compartilhamento estiver ligado.'
+            : 'No navegador, a localização só é enviada com o app aberto na tela.'}
+          {isAndroidBrowser && <> <a href={APK_URL} style={{ textDecoration: 'underline', fontWeight: 600 }}>Instale o app Android</a> para compartilhar em segundo plano.</>}
         </p>
       </div>
 

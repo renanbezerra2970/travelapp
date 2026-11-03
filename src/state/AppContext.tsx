@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, type MemberLocation, type PrivateData, type Profile } from '../lib/supabase';
 import { distance, type LatLng } from '../lib/geo';
 import { faceUrls } from '../lib/faces';
+import { BackgroundGeolocation, isNative } from '../lib/native';
 
 export const DEMO = import.meta.env.DEV && new URLSearchParams(location.search).has('demo');
 
@@ -231,7 +232,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [tripId, refreshTrip]);
 
   // ── GPS ──
+  // App Android: GPS nativo que continua em segundo plano (com notificação fixa) enquanto o compartilhamento estiver ligado
+  const nativeWatch = useRef<string | null>(null);
+  const sharingRef = useRef(sharing);
+  sharingRef.current = sharing;
+  const startNative = useCallback(async () => {
+    if (nativeWatch.current) return;
+    nativeWatch.current = 'starting';
+    try {
+      const bg = sharingRef.current;
+      nativeWatch.current = await BackgroundGeolocation.addWatcher(
+        {
+          ...(bg ? { backgroundTitle: 'Eurotrip · compartilhando localização', backgroundMessage: 'O grupo vê onde você está. Desligue em Grupo › Compartilhar.' } : {}),
+          requestPermissions: true,
+          stale: false,
+          distanceFilter: 15,
+        },
+        (loc, err) => {
+          if (err) {
+            setGpsError(err.code === 'NOT_AUTHORIZED' ? 'Permissão de localização negada. Toque em "Usar GPS" e permita em Configurações › Localização.' : 'Não foi possível obter sua localização.');
+            if (err.code === 'NOT_AUTHORIZED' && confirm('O app precisa da sua localização para o mapa e o grupo. Abrir as configurações?')) BackgroundGeolocation.openSettings();
+            return;
+          }
+          if (!loc) return;
+          setGpsError(null);
+          setGpsPos({ p: { lat: loc.latitude, lng: loc.longitude }, acc: loc.accuracy, heading: loc.bearing ?? null });
+        },
+      );
+      LS.set('gpsOn', '1');
+    } catch {
+      nativeWatch.current = null;
+      setGpsError('Não foi possível ligar o GPS.');
+    }
+  }, []);
+
+  // ligar/desligar o compartilhamento troca o modo (com ou sem segundo plano)
+  useEffect(() => {
+    if (!isNative || !nativeWatch.current || nativeWatch.current === 'starting') return;
+    const id = nativeWatch.current;
+    nativeWatch.current = null;
+    BackgroundGeolocation.removeWatcher({ id }).then(() => startNative());
+  }, [sharing, startNative]);
+
   const startGps = useCallback(() => {
+    if (isNative) {
+      startNative();
+      return;
+    }
     if (watchId.current !== null || !('geolocation' in navigator)) {
       if (!('geolocation' in navigator)) setGpsError('Este aparelho não oferece localização.');
       return;
@@ -248,10 +295,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => {
     if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    if (nativeWatch.current && nativeWatch.current !== 'starting') BackgroundGeolocation.removeWatcher({ id: nativeWatch.current });
   }, []);
 
   // Se já houver permissão, liga o GPS sem perguntar
   useEffect(() => {
+    if (isNative) {
+      if (LS.get('gpsOn')) startGps();
+      return;
+    }
     navigator.permissions?.query({ name: 'geolocation' as PermissionName }).then((r) => r.state === 'granted' && startGps()).catch(() => {});
   }, [startGps]);
 
